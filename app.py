@@ -11,8 +11,26 @@ from sendgrid.helpers.mail import Mail
 from xhtml2pdf import pisa
 from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
+import subprocess
 
-# -------------------- CONFIGURACIÓN DE USUARIOS --------------------
+# --------------------------------------------------------------------
+# Asegurarse de que el modelo spaCy en español esté instalado
+# --------------------------------------------------------------------
+try:
+    nlp = spacy.load("es_core_news_md")
+except OSError:
+    st.info("Descargando modelo spaCy 'es_core_news_md'. Esto puede tardar unos minutos...")
+    subprocess.run(["python3", "-m", "spacy", "download", "es_core_news_md"], check=True)
+    nlp = spacy.load("es_core_news_md")
+
+# --------------------------------------------------------------------
+# Inicialización de LanguageTool para español
+# --------------------------------------------------------------------
+tool = language_tool_python.LanguageTool("es")
+
+# --------------------------------------------------------------------
+# Configuración de usuarios (login local)
+# Se utiliza un archivo JSON para almacenar usuarios.
 USERS_FILE = "users.json"
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r") as f:
@@ -20,7 +38,7 @@ if os.path.exists(USERS_FILE):
 else:
     users = {}
 
-# Forzamos que exista el usuario admin con los datos solicitados.
+# Forzar que exista el usuario administrador con datos predeterminados.
 if "alesongs@gmail.com" not in users:
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
@@ -31,7 +49,9 @@ if "alesongs@gmail.com" not in users:
     with open(USERS_FILE, "w") as f:
         json.dump(users, f)
 
-# -------------------- INICIALIZACIÓN DE SESSION_STATE --------------------
+# --------------------------------------------------------------------
+# Inicialización de st.session_state
+# --------------------------------------------------------------------
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_email" not in st.session_state:
@@ -47,7 +67,9 @@ if "show_repeticiones_totales" not in st.session_state:
 if "show_rimas_parciales" not in st.session_state:
     st.session_state["show_rimas_parciales"] = True
 
-# -------------------- FUNCIÓN DE ENVÍO DE EMAIL CON SENDGRID --------------------
+# --------------------------------------------------------------------
+# Función para enviar email usando SendGrid
+# --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
         sg = sendgrid.SendGridAPIClient(api_key=st.secrets["sendgrid"]["api_key"])
@@ -66,186 +88,9 @@ def send_email(to_email, subject, body):
     except Exception as e:
         st.error(f"Error al enviar email: {e}")
 
-# -------------------- PÁGINA DE LOGIN --------------------
-if not st.session_state["authenticated"]:
-    st.title("Edita sobrio")
-    email_input = st.text_input("Email", key="login_email", label_visibility="visible")
-    password_input = st.text_input("Contraseña", type="password", key="login_password", label_visibility="visible")
-    if st.button("Entrar"):
-        if email_input in users and bcrypt.checkpw(password_input.encode(), users[email_input]["password"].encode()):
-            st.session_state["authenticated"] = True
-            st.session_state["user_email"] = email_input
-            st.session_state["nombre"] = users[email_input]["nombre"]
-            st.session_state["is_admin"] = (email_input == "alesongs@gmail.com")
-            st.success(f"¡Bienvenido, {users[email_input]['nombre']}!")
-            st.experimental_rerun()
-        else:
-            st.error("Credenciales incorrectas, intenta de nuevo.")
-    st.stop()
-
-# -------------------- INTERFAZ DEL USUARIO LOGUEADO --------------------
-st.sidebar.markdown(f"**Usuario:** {st.session_state['nombre']}")
-if st.sidebar.button("Cerrar sesión"):
-    st.session_state["authenticated"] = False
-    st.session_state["user_email"] = ""
-    st.session_state["nombre"] = ""
-    st.session_state["is_admin"] = False
-    st.experimental_rerun()
-
-if st.session_state["is_admin"]:
-    if st.sidebar.button("Panel de Administración"):
-        st.session_state["show_admin_panel"] = True
-    if st.sidebar.button("Salir del Panel Admin"):
-        st.session_state["show_admin_panel"] = False
-
-# -------------------- PANEL DE ADMINISTRACIÓN (solo para admin) --------------------
-if st.session_state["is_admin"] and st.session_state["show_admin_panel"]:
-    st.title("Panel de Administración - Registro y Gestión de Usuarios")
-    st.subheader("Registrar nuevo usuario")
-    reg_nombre = st.text_input("Nombre", key="reg_nombre", label_visibility="visible")
-    reg_email = st.text_input("Email", key="reg_email", label_visibility="visible")
-    reg_password = st.text_input("Contraseña", type="password", key="reg_password", label_visibility="visible")
-    if st.button("Registrar usuario"):
-        if reg_email in users:
-            st.error("El usuario ya existe.")
-        elif not reg_nombre or not reg_email or not reg_password:
-            st.error("Completa todos los campos.")
-        else:
-            hashed_pw = bcrypt.hashpw(reg_password.encode(), bcrypt.gensalt()).decode()
-            users[reg_email] = {
-                "nombre": reg_nombre,
-                "email": reg_email,
-                "password": hashed_pw
-            }
-            with open(USERS_FILE, "w") as f:
-                json.dump(users, f)
-            st.success(f"Usuario {reg_nombre} registrado exitosamente.")
-            send_email(reg_email, "Bienvenido a Edita sobrio", 
-                       f"Que tranza {reg_nombre}, aquí te van tus datos para entrar a la app Edita sobrio, ¿va?\nEmail: {reg_email}\nContraseña: {reg_password}\nEspero que lo disfrutes, bandita.")
-    st.markdown("---")
-    st.subheader("Usuarios registrados")
-    for user_email, info in users.items():
-        st.markdown(
-            f"**Nombre:** {info.get('nombre', 'N/A')}  |  **Email:** {info.get('email', 'N/A')}  |  **Password:** {info.get('password', 'N/A')}"
-        )
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("Eliminar usuario", key=f"elim_{user_email}"):
-                if user_email == "alesongs@gmail.com":
-                    st.error("No puedes eliminar al administrador.")
-                else:
-                    del users[user_email]
-                    with open(USERS_FILE, "w") as f:
-                        json.dump(users, f)
-                    st.success(f"Usuario {info.get('nombre', 'N/A')} eliminado.")
-                    st.experimental_rerun()
-        with col2:
-            if st.button("Editar usuario", key=f"edit_{user_email}"):
-                st.info("Funcionalidad de edición pendiente de implementar.")
-        with col3:
-            if st.button("Reenviar email", key=f"reenviar_{user_email}"):
-                send_email(info.get('email', 'N/A'), "Tus credenciales de Edita sobrio", 
-                           f"Que tranza {info.get('nombre', 'N/A')}, aquí te van tus datos para entrar a la app Edita sobrio, ¿va?\nEmail: {info.get('email', 'N/A')}\nContraseña: (la que registraste)\nEspero que lo disfrutes, bandita.")
-    st.stop()
-
-# -------------------- INTERFAZ DE LA APP (USUARIO NORMAL) --------------------
-st.title("Edita sobrio")
-st.sidebar.markdown("### Ver")
-
-default_keys = {
-    "analysis_done": False,
-    "edit_mode": False,
-    "checkboxes_enabled": True,
-    "show_adverbios": True,
-    "show_adjetivos": True,
-    "show_repeticiones_totales": True,
-    "show_rimas_parciales": True,
-    "show_dobles_verbos": True,
-    "show_preterito_compuesto": True,
-    "show_orthography": False,
-    "show_grammar": False,
-    "tokens_data": None,
-    "lt_data": [],
-    "original_text": "",
-    "resultado_html": ""
-}
-for key, val in default_keys.items():
-    if key not in st.session_state:
-        st.session_state[key] = val
-
-disabled_checkboxes = not st.session_state.get("checkboxes_enabled", True)
-
-# Barra lateral: cada checkbox muestra el recuento entre paréntesis.
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_adverbios"] = st.checkbox("", value=st.session_state.get("show_adverbios", True), key="adverbios_cb", disabled=disabled_checkboxes)
-with col2:
-    adverbios_count = st.session_state.get("marca_counts", {}).get("adverbios", 0)
-    st.markdown(f"<span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span>", unsafe_allow_html=True)
-
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_adjetivos"] = st.checkbox("", value=st.session_state.get("show_adjetivos", True), key="adjetivos_cb", disabled=disabled_checkboxes)
-with col2:
-    adjetivos_count = st.session_state.get("marca_counts", {}).get("adjetivos", 0)
-    st.markdown(f"<span style='background-color: pink; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span>", unsafe_allow_html=True)
-
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_repeticiones_totales"] = st.checkbox("", value=st.session_state.get("show_repeticiones_totales", True), key="rep_totales_cb", disabled=disabled_checkboxes)
-with col2:
-    rep_totales_count = st.session_state.get("marca_counts", {}).get("repeticiones_totales", 0)
-    st.markdown(f"<span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span>", unsafe_allow_html=True)
-
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_rimas_parciales"] = st.checkbox("", value=st.session_state.get("show_rimas_parciales", True), key="rimas_cb", disabled=disabled_checkboxes)
-with col2:
-    rimas_count = st.session_state.get("marca_counts", {}).get("rimas_parciales", 0)
-    st.markdown(f"<span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span>", unsafe_allow_html=True)
-
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_dobles_verbos"] = st.checkbox("", value=st.session_state.get("show_dobles_verbos", True), key="dobles_cb", disabled=disabled_checkboxes)
-with col2:
-    dobles_count = st.session_state.get("marca_counts", {}).get("dobles_verbos", 0)
-    st.markdown(f"<span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span>", unsafe_allow_html=True)
-
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_preterito_compuesto"] = st.checkbox("", value=st.session_state.get("show_preterito_compuesto", True), key="preterito_cb", disabled=disabled_checkboxes)
-with col2:
-    preterito_count = st.session_state.get("marca_counts", {}).get("pretérito_compuesto", 0)
-    st.markdown(f"<span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span>", unsafe_allow_html=True)
-
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_orthography"] = st.checkbox("", value=st.session_state.get("show_orthography", False), key="orthography_cb", disabled=disabled_checkboxes)
-with col2:
-    ortografia_count = st.session_state.get("marca_counts", {}).get("ortografía", 0)
-    st.markdown(f"<span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span>", unsafe_allow_html=True)
-
-col1, col2 = st.sidebar.columns([0.1, 0.9])
-with col1:
-    st.session_state["show_grammar"] = st.checkbox("", value=st.session_state.get("show_grammar", False), key="grammar_cb", disabled=disabled_checkboxes)
-with col2:
-    gramatica_count = st.session_state.get("marca_counts", {}).get("gramática", 0)
-    st.markdown(f"<span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span>", unsafe_allow_html=True)
-
-st.markdown(
-    """
-    <style>
-    .quill {
-        font-size: 20px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-nlp = spacy.load("es_core_news_md")
-tool = language_tool_python.LanguageTool("es")
-
+# --------------------------------------------------------------------
+# Funciones de análisis y procesamiento del texto
+# --------------------------------------------------------------------
 def correct_pos(token_text, spaCy_pos):
     lowered = token_text.lower()
     if spaCy_pos == "ADJ":
@@ -355,7 +200,7 @@ def construir_html(tokens_data, lt_data, original_text,
                     if show_grammar and cat == "GRAMMAR":
                         tk["styles"].add("text-decoration: underline wavy yellow;")
 
-    # Procesar repeticiones totales y rimas parciales en un solo loop:
+    # Procesar repeticiones totales y rimas parciales
     for i, tk in enumerate(tokens_copy):
         if tk["pos"] in {"NOUN", "ADJ", "VERB"}:
             start_w = max(0, i - 45)
@@ -500,9 +345,13 @@ def clean_text(html_text):
     soup = BeautifulSoup(html_text, "html.parser")
     return soup.get_text(separator="\n")
 
+# --------------------------------------------------------------------
+# Lógica principal de la app
+# --------------------------------------------------------------------
 analysis_done = st.session_state.get("analysis_done", False)
 edit_mode = st.session_state.get("edit_mode", False)
 
+# --- MODO INICIAL: Mostrar área de texto para pegar la obra maestra ---
 if not analysis_done:
     st.markdown("### Pega aquí tu obra maestra")
     texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -530,6 +379,7 @@ if not analysis_done:
         st.session_state["marca_counts"] = marca_counts
         st.experimental_rerun()
 
+# --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
 elif not edit_mode:
     st.markdown("### Texto analizado (no editable)")
     html_result, marca_counts = construir_html(
@@ -548,6 +398,7 @@ elif not edit_mode:
     st.session_state["resultado_html"] = html_result
     st.session_state["marca_counts"] = marca_counts
     st.markdown(html_result, unsafe_allow_html=True)
+    # La barra lateral ya muestra los recuentos.
     colA, colB = st.columns(2)
     with colA:
         if st.button("Editar"):
@@ -555,7 +406,6 @@ elif not edit_mode:
             st.experimental_rerun()
     with colB:
         if st.button("Exportar a PDF"):
-            # Extraemos los contadores para el PDF
             marca = st.session_state.get("marca_counts", {})
             adverbios_count = marca.get("adverbios", 0)
             adjetivos_count = marca.get("adjetivos", 0)
@@ -585,6 +435,7 @@ elif not edit_mode:
             with open(pdf_path, "rb") as f:
                 st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
+# --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
 else:
     st.markdown("### Texto analizado (editable)")
     with st.form("editor_form"):
