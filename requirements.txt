@@ -1,0 +1,8 @@
+streamlit
+spacy
+language-tool-python
+bcrypt
+xhtml2pdf
+streamlit-quill
+beautifulsoup4
+sendgrid
