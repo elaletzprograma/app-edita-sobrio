@@ -1,11 +1,9 @@
 streamlit
-spacy==3.5.0
+spacy==3.5.2
 language-tool-python
 bcrypt
 xhtml2pdf
 streamlit-quill
 beautifulsoup4
 sendgrid
-
-# Modelo de spaCy en español (versión 3.5.0)
-es-core-news-md @ https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.5.0/es_core_news_md-3.5.0-py3-none-any.whl
+es-core-news-md @ https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.5.2/es_core_news_md-3.5.2-py3-none-any.whl
