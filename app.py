@@ -11,21 +11,19 @@ from sendgrid.helpers.mail import Mail
 from xhtml2pdf import pisa
 from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
-import subprocess
 
 # --------------------------------------------------------------------
-# Asegurarse de que el modelo spaCy en español esté instalado
+# Carga el modelo spaCy en español (se asume que se instalará vía requirements.txt)
 # --------------------------------------------------------------------
 nlp = spacy.load("es_core_news_md")
 
 # --------------------------------------------------------------------
-# Inicialización de LanguageTool para español
+# Inicializa LanguageTool para español
 # --------------------------------------------------------------------
 tool = language_tool_python.LanguageTool("es")
 
 # --------------------------------------------------------------------
-# Configuración de usuarios (login local)
-# Se utiliza un archivo JSON para almacenar usuarios.
+# Configuración de usuarios para login local usando un archivo JSON
 USERS_FILE = "users.json"
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r") as f:
@@ -33,7 +31,7 @@ if os.path.exists(USERS_FILE):
 else:
     users = {}
 
-# Forzar que exista el usuario administrador con datos predeterminados.
+# Forzar la existencia del usuario administrador
 if "alesongs@gmail.com" not in users:
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
@@ -63,7 +61,7 @@ if "show_rimas_parciales" not in st.session_state:
     st.session_state["show_rimas_parciales"] = True
 
 # --------------------------------------------------------------------
-# Función para enviar email usando SendGrid
+# Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
 # --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
@@ -84,7 +82,7 @@ def send_email(to_email, subject, body):
         st.error(f"Error al enviar email: {e}")
 
 # --------------------------------------------------------------------
-# Funciones de análisis y procesamiento del texto
+# Funciones para el análisis del texto
 # --------------------------------------------------------------------
 def correct_pos(token_text, spaCy_pos):
     lowered = token_text.lower()
@@ -195,7 +193,6 @@ def construir_html(tokens_data, lt_data, original_text,
                     if show_grammar and cat == "GRAMMAR":
                         tk["styles"].add("text-decoration: underline wavy yellow;")
 
-    # Procesar repeticiones totales y rimas parciales
     for i, tk in enumerate(tokens_copy):
         if tk["pos"] in {"NOUN", "ADJ", "VERB"}:
             start_w = max(0, i - 45)
@@ -346,7 +343,7 @@ def clean_text(html_text):
 analysis_done = st.session_state.get("analysis_done", False)
 edit_mode = st.session_state.get("edit_mode", False)
 
-# --- MODO INICIAL: Mostrar área de texto para pegar la obra maestra ---
+# --- MODO INICIAL: Área para pegar el texto a analizar ---
 if not analysis_done:
     st.markdown("### Pega aquí tu obra maestra")
     texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -393,7 +390,6 @@ elif not edit_mode:
     st.session_state["resultado_html"] = html_result
     st.session_state["marca_counts"] = marca_counts
     st.markdown(html_result, unsafe_allow_html=True)
-    # La barra lateral ya muestra los recuentos.
     colA, colB = st.columns(2)
     with colA:
         if st.button("Editar"):
@@ -509,3 +505,4 @@ else:
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+
