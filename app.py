@@ -16,12 +16,7 @@ import subprocess
 # --------------------------------------------------------------------
 # Asegurarse de que el modelo spaCy en español esté instalado
 # --------------------------------------------------------------------
-try:
-    nlp = spacy.load("es_core_news_md")
-except OSError:
-    st.info("Descargando modelo spaCy 'es_core_news_md'. Esto puede tardar unos minutos...")
-    subprocess.run(["python3", "-m", "spacy", "download", "es_core_news_md"], check=True)
-    nlp = spacy.load("es_core_news_md")
+nlp = spacy.load("es_core_news_md")
 
 # --------------------------------------------------------------------
 # Inicialización de LanguageTool para español
@@ -514,4 +509,3 @@ else:
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
-
