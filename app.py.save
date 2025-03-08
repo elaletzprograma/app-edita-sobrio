@@ -1,7 +1,0 @@
-# Identificar palabras repetidas (solo sustantivos, adjetivos y verbos en la misma conjugación, sin guiones ni guiones largos)
-palabras_validas = [
-    token.text.lower() for token in nlp(texto.replace("-", "").replace("–", "").replace("—", ""))
-    if token.pos_ in {"NOUN", "ADJ", "VERB"} and not token.is_stop and token.text not in {"-", "–", "—"}
-]
-palabras_repetidas = {palabra for palabra in palabras_validas if palabras_validas.count(palabra) > 1}
-
