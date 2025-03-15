@@ -108,7 +108,6 @@ for key, data in checkboxes.items():
     if "marca_counts" in st.session_state:
         count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
     col1, col2 = st.sidebar.columns([1, 4])
-    # Usamos label_visibility="hidden" para evitar warnings por label vacío
     current_val = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
     col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
 
