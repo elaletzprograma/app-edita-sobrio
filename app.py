@@ -78,6 +78,11 @@ if "edit_mode" not in st.session_state:
 if "rerun_flag" not in st.session_state:
     st.session_state["rerun_flag"] = False
 
+# --- Verificamos la bandera de rerun al inicio ---
+if st.session_state.get("rerun_flag", False):
+    st.session_state["rerun_flag"] = False
+    st.experimental_rerun()
+
 # --------------------------------------------------------------------
 # Sidebar con checkboxes dinámicos con recuento y estilo
 # --------------------------------------------------------------------
@@ -514,10 +519,8 @@ else:
         st.session_state["resultado_html"] = final_html
         st.session_state["marca_counts"] = marca_counts
         st.session_state["edit_mode"] = False
-        st.session_state["rerun_flag"] = True
     elif return_btn:
         st.session_state["edit_mode"] = False
-        st.session_state["rerun_flag"] = True
     elif export_btn:
         html_result, marca_counts = construir_html(
             st.session_state["tokens_data"],
@@ -559,7 +562,3 @@ else:
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
-
-    if st.session_state.get("rerun_flag", False):
-        st.session_state["rerun_flag"] = False
-        st.experimental_rerun()
