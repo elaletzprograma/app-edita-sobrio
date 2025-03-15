@@ -12,11 +12,11 @@ from xhtml2pdf import pisa
 from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
-# Si st.experimental_rerun no existe, lo definimos.
+# Si st.experimental_rerun no existe, lo definimos con un valor por defecto para rerun_data.
 if not hasattr(st, "experimental_rerun"):
+    from streamlit.runtime.scriptrunner.script_runner import RerunException
     def experimental_rerun():
-        from streamlit.runtime.scriptrunner.script_runner import RerunException
-        raise RerunException
+        raise RerunException(rerun_data={})
     st.experimental_rerun = experimental_rerun
 
 # --------------------------------------------------------------------
@@ -38,7 +38,7 @@ class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
             raise language_tool_python.utils.LanguageToolError(response.content.decode())
         return response.json()
 
-# Nota: Si la API gratuita da "Upgrade Required", se capturará el error en analizar_texto.
+# Nota: Si la API gratuita devuelve "Upgrade Required", se captura el error en analizar_texto.
 tool = LanguageToolPost('es')
 
 # --------------------------------------------------------------------
@@ -122,12 +122,12 @@ for key, data in checkboxes.items():
     if "marca_counts" in st.session_state:
         count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
     col1, col2 = st.sidebar.columns([1, 4])
-    # Creamos el checkbox sin modificar manualmente st.session_state.
-    _ = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
+    # Se asigna un label no vacío (" ") y se oculta visualmente.
+    _ = col1.checkbox(" ", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
     col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
-# Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
+# Función para enviar email usando SendGrid
 # --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
