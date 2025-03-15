@@ -483,18 +483,15 @@ else:
         st.rerun()
     elif export_btn:
         html_result, marca_counts = construir_html(
-            st.session_state["tokens_data"],
-            st.session_state["lt_data"],
-            st.session_state["original_text"],
-            st.session_state.get("show_adverbios", True),
-            st.session_state.get("show_adjetivos", True),
-            st.session_state.get("show_repeticiones_totales", True),
-            st.session_state.get("show_rimas_parciales", True),
-            st.session_state.get("show_dobles_verbos", True),
-            st.session_state.get("show_preterito_compuesto", True),
-            st.session_state.get("show_orthography", False),
-            st.session_state.get("show_grammar", False)
-        )
+        st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", value=True, label_visibility="collapsed")
+        st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", value=True, label_visibility="collapsed")
+        st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", value=True, label_visibility="collapsed")
+        st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", value=True, label_visibility="collapsed")
+        st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", value=True, label_visibility="collapsed")
+        st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", value=True, label_visibility="collapsed")
+        st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", value=False, label_visibility="collapsed")
+        st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", value=False, label_visibility="collapsed")
+
         adverbios_count = marca_counts.get("adverbios", 0)
         adjetivos_count = marca_counts.get("adjetivos", 0)
         rep_totales_count = marca_counts.get("repeticiones_totales", 0)
