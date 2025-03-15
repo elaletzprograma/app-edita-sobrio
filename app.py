@@ -74,17 +74,43 @@ if "show_repeticiones_totales" not in st.session_state:
 if "show_rimas_parciales" not in st.session_state:
     st.session_state["show_rimas_parciales"] = True
 
-# Sidebar con las casillas para activar/desactivar funcionalidades
+# --------------------------------------------------------------------
+# Sidebar con checkboxes dinámicos con recuento y estilo
+# --------------------------------------------------------------------
 st.sidebar.header("Opciones del análisis")
 
-st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", st.session_state.get("show_adverbios", True))
-st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", st.session_state.get("show_adjetivos", True))
-st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", st.session_state.get("show_repeticiones_totales", True))
-st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", st.session_state.get("show_rimas_parciales", True))
-st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", st.session_state.get("show_dobles_verbos", True))
-st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
-st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
-st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
+# Mapeo de checkboxes: clave del st.session_state, etiqueta, valor default y estilo CSS para la etiqueta
+checkboxes = {
+    "show_adverbios": {"label": "Mostrar adverbios", "default": True, "style": "color: green;"},
+    "show_adjetivos": {"label": "Mostrar adjetivos", "default": True, "style": "background-color: pink;"},
+    "show_repeticiones_totales": {"label": "Mostrar repeticiones totales", "default": True, "style": "background-color: orange;"},
+    "show_rimas_parciales": {"label": "Mostrar rimas parciales", "default": True, "style": "background-color: #ffcc80;"},
+    "show_dobles_verbos": {"label": "Mostrar dobles verbos", "default": True, "style": "background-color: #dab4ff;"},
+    "show_preterito_compuesto": {"label": "Mostrar pretérito compuesto", "default": True, "style": "background-color: lightblue;"},
+    "show_orthography": {"label": "Mostrar errores ortográficos", "default": False, "style": "text-decoration: underline wavy red;"},
+    "show_grammar": {"label": "Mostrar errores gramaticales", "default": False, "style": "text-decoration: underline wavy yellow;"}
+}
+
+# Mapeo para extraer los recuentos de marca, según cómo se guardan en marca_counts
+mapping_counts = {
+    "show_adverbios": "adverbios",
+    "show_adjetivos": "adjetivos",
+    "show_repeticiones_totales": "repeticiones_totales",
+    "show_rimas_parciales": "rimas_parciales",
+    "show_dobles_verbos": "dobles_verbos",
+    "show_preterito_compuesto": "pretérito_compuesto",
+    "show_orthography": "ortografía",
+    "show_grammar": "gramática"
+}
+
+for key, data in checkboxes.items():
+    count = 0
+    if "marca_counts" in st.session_state:
+        count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
+    col1, col2 = st.sidebar.columns([1, 4])
+    current_val = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key)
+    st.session_state[key] = current_val
+    col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
 # Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
