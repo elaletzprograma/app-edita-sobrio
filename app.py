@@ -20,7 +20,18 @@ nlp = spacy.load("es_core_news_md")
 # --------------------------------------------------------------------
 # Inicializa LanguageTool para español
 # --------------------------------------------------------------------
-tool = language_tool_python.LanguageToolPublicAPI("es")
+import language_tool_python
+
+class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
+    def _query_server(self, url, params):
+        import requests
+        response = requests.post(url, data=params)
+        if response.status_code != 200:
+            raise language_tool_python.utils.LanguageToolError(response.content.decode())
+        return response.json()
+
+tool = LanguageToolPost('es')
+
 
 # --------------------------------------------------------------------
 # Configuración de usuarios para login local usando un archivo JSON
