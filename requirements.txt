@@ -1,12 +1,12 @@
 streamlit
-spacy==3.6.0
-thinc==8.1.10
+spacy==3.7.4
+thinc==8.2.3
+Cython>=3.0.8
 language-tool-python
 bcrypt
 xhtml2pdf
 streamlit-quill
 beautifulsoup4
 sendgrid
-Cython>=0.29.37
+es-core-news-md @ https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.7.0/es_core_news_md-3.7.0-py3-none-any.whl
 
-es-core-news-md @ https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.6.0/es_core_news_md-3.6.0-py3-none-any.whl
