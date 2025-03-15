@@ -491,7 +491,7 @@ else:
         st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", value=True, label_visibility="collapsed")
         st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", value=False, label_visibility="collapsed")
         st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", value=False, label_visibility="collapsed")
-
+        )
         adverbios_count = marca_counts.get("adverbios", 0)
         adjetivos_count = marca_counts.get("adjetivos", 0)
         rep_totales_count = marca_counts.get("repeticiones_totales", 0)
