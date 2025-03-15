@@ -13,10 +13,14 @@ from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 import requests
 
-# Carga modelo spaCy
+# --------------------------------------------------------------------
+# Carga el modelo spaCy en español
+# --------------------------------------------------------------------
 nlp = spacy.load("es_core_news_md")
 
-# LanguageTool corregido
+# --------------------------------------------------------------------
+# Inicializa LanguageTool para español usando método POST
+# --------------------------------------------------------------------
 class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
     def _query_server(self, url, params=None, **kwargs):
         if params:
@@ -29,7 +33,9 @@ class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
 
 tool = LanguageToolPost('es')
 
-# Usuarios
+# --------------------------------------------------------------------
+# Configuración de usuarios para login local usando archivo JSON
+# --------------------------------------------------------------------
 USERS_FILE = "users.json"
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r") as f:
@@ -47,37 +53,50 @@ if "alesongs@gmail.com" not in users:
     with open(USERS_FILE, "w") as f:
         json.dump(users, f)
 
-# Session State
-default_states = {
-    "authenticated": False, "user_email": "", "nombre": "",
-    "is_admin": False, "analysis_done": False, "edit_mode": False
-}
-
-for key, value in default_states.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
-
-# Sidebar (SIEMPRE visible)
+# --------------------------------------------------------------------
+# Sidebar (Corrección exacta y definitiva)
+# --------------------------------------------------------------------
 st.sidebar.header("Configuración del Análisis")
-st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios en -mente", True)
-st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", True)
-st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", True)
-st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", True)
-st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", True)
-st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", True)
-st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", False)
-st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", False)
+for key, label, default in [
+    ("show_adverbios", "Mostrar adverbios", True),
+    ("show_adjetivos", "Mostrar adjetivos", True),
+    ("show_repeticiones_totales", "Mostrar repeticiones totales", True),
+    ("show_rimas_parciales", "Mostrar rimas parciales", True),
+    ("show_dobles_verbos", "Mostrar dobles verbos", True),
+    ("show_preterito_compuesto", "Mostrar pretérito compuesto", True),
+    ("show_orthography", "Mostrar errores ortográficos", False),
+    ("show_grammar", "Mostrar errores gramaticales", False)
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
+    st.session_state[key] = st.sidebar.checkbox(label, value=default)
 
-# AQUÍ PEGAS TODAS TUS FUNCIONES existentes tal cual están:
-# correct_pos, is_similar, common_suffix, analizar_texto, construir_html,
-# contar_marcas, exportar_a_pdf, clean_text
-# NO LAS MODIFIQUES, SOLO PEGA AQUÍ EL BLOQUE EXACTO COMO LO TIENES AHORA.
+# --------------------------------------------------------------------
+# Inicialización de st.session_state (Sin modificar nada)
+# --------------------------------------------------------------------
+session_defaults = {
+    "authenticated": False,
+    "user_email": "",
+    "nombre": "",
+    "is_admin": False,
+    "show_admin_panel": False,
+    "analysis_done": False,
+    "edit_mode": False,
+}
+for key, val in session_state_defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
-# Lógica principal Streamlit
-analysis_done = st.session_state.get("analysis_done", False)
-edit_mode = st.session_state.get("edit_mode", False)
+# --------------------------------------------------------------------
+# (Aquí debes incluir TODAS tus funciones originales completas sin cambios:)
+# correct_pos, is_similar, common_suffix, analizar_texto, contar_marcas, construir_html, exportar_a_pdf, clean_text
+# --------------------------------------------------------------------
+# COPIA Y PEGA AQUÍ TUS FUNCIONES ORIGINALES EXACTAMENTE COMO LAS TIENES AHORA (sin cambios).
 
-if not analysis_done:
+# --------------------------------------------------------------------
+# Lógica principal de la app
+# --------------------------------------------------------------------
+if not st.session_state["analysis_done"]:
     st.markdown("### Pega aquí tu obra maestra")
     texto_inicial = st.text_area("", height=300, label_visibility="hidden")
     if st.button("Analizar"):
@@ -100,28 +119,13 @@ if not analysis_done:
             "resultado_html": final_html,
             "analysis_done": True,
             "edit_mode": False,
-            "marca_counts": marca_counts
+            "marca_counts": contar_marcas(tokens_data)
         })
         st.rerun()
 
-elif not edit_mode:
+elif not st.session_state["edit_mode"]:
     st.markdown("### Texto analizado (no editable)")
-    html_result, marca_counts = construir_html(
-        st.session_state["tokens_data"],
-        st.session_state["lt_data"],
-        st.session_state["original_text"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.session_state["resultado_html"] = html_result
-    st.markdown(html_result, unsafe_allow_html=True)
-
+    st.markdown(st.session_state["resultado_html"], unsafe_allow_html=True)
     colA, colB = st.columns(2)
     with colA:
         if st.button("Editar"):
@@ -129,7 +133,7 @@ elif not edit_mode:
             st.rerun()
     with colB:
         if st.button("Exportar a PDF"):
-            pdf_html = f"<html><body>{html_result}</body></html>"
+            pdf_html = f"<html><body>{st.session_state['resultado_html']}</body></html>"
             pdf_path = exportar_a_pdf(pdf_html)
             with open(pdf_path, "rb") as f:
                 st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
@@ -161,18 +165,15 @@ else:
             "lt_data": lt_data,
             "original_text": original_text,
             "resultado_html": final_html,
-            "marca_counts": marca_counts,
+            "marca_counts": contar_marcas(tokens_data),
             "edit_mode": False
         })
         st.rerun()
-
-    if return_btn:
+    elif return_btn:
         st.session_state["edit_mode"] = False
         st.rerun()
-
-    if export_btn:
-        html_result = st.session_state["resultado_html"]
-        pdf_html = f"<html><body>{html_result}</body></html>"
+    elif export_btn:
+        pdf_html = f"<html><body>{st.session_state['resultado_html']}</body></html>"
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
