@@ -20,8 +20,6 @@ nlp = spacy.load("es_core_news_md")
 # --------------------------------------------------------------------
 # Inicializa LanguageTool para español
 # --------------------------------------------------------------------
-import language_tool_python
-
 class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
     def _query_server(self, url, params=None, **kwargs):
         import requests
@@ -45,7 +43,6 @@ if os.path.exists(USERS_FILE):
 else:
     users = {}
 
-# Forzar la existencia del usuario administrador
 if "alesongs@gmail.com" not in users:
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
@@ -73,13 +70,16 @@ if "show_repeticiones_totales" not in st.session_state:
     st.session_state["show_repeticiones_totales"] = True
 if "show_rimas_parciales" not in st.session_state:
     st.session_state["show_rimas_parciales"] = True
+if "analysis_done" not in st.session_state:
+    st.session_state["analysis_done"] = False
+if "edit_mode" not in st.session_state:
+    st.session_state["edit_mode"] = False
 
 # --------------------------------------------------------------------
 # Sidebar con checkboxes dinámicos con recuento y estilo
 # --------------------------------------------------------------------
 st.sidebar.header("Opciones del análisis")
 
-# Mapeo de checkboxes: clave del st.session_state, etiqueta, valor default y estilo CSS para la etiqueta
 checkboxes = {
     "show_adverbios": {"label": "Mostrar adverbios", "default": True, "style": "color: green;"},
     "show_adjetivos": {"label": "Mostrar adjetivos", "default": True, "style": "background-color: pink;"},
@@ -91,7 +91,6 @@ checkboxes = {
     "show_grammar": {"label": "Mostrar errores gramaticales", "default": False, "style": "text-decoration: underline wavy yellow;"}
 }
 
-# Mapeo para extraer los recuentos de marca, según cómo se guardan en marca_counts
 mapping_counts = {
     "show_adverbios": "adverbios",
     "show_adjetivos": "adjetivos",
@@ -108,8 +107,8 @@ for key, data in checkboxes.items():
     if "marca_counts" in st.session_state:
         count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
     col1, col2 = st.sidebar.columns([1, 4])
+    # El widget checkbox actualiza automáticamente st.session_state usando la key
     current_val = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key)
-    st.session_state[key] = current_val
     col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
@@ -395,7 +394,6 @@ def clean_text(html_text):
 analysis_done = st.session_state.get("analysis_done", False)
 edit_mode = st.session_state.get("edit_mode", False)
 
-# --- MODO INICIAL: Área para pegar el texto a analizar ---
 if not analysis_done:
     st.markdown("### Pega aquí tu obra maestra")
     texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -423,7 +421,6 @@ if not analysis_done:
         st.session_state["marca_counts"] = marca_counts
         st.rerun()
 
-# --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
 elif not edit_mode:
     st.markdown("### Texto analizado (no editable)")
     html_result, marca_counts = construir_html(
@@ -478,7 +475,6 @@ elif not edit_mode:
             with open(pdf_path, "rb") as f:
                 st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
-# --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
 else:
     st.markdown("### Texto analizado (editable)")
     with st.form("editor_form"):
