@@ -23,7 +23,7 @@ nlp = spacy.load("es_core_news_md")
 import language_tool_python
 
 class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
-    def _query_server(self, url, params):
+    def _query_server(self, url, params, **kwargs):
         import requests
         response = requests.post(url, data=params)
         if response.status_code != 200:
@@ -31,6 +31,7 @@ class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
         return response.json()
 
 tool = LanguageToolPost('es')
+
 
 
 # --------------------------------------------------------------------
