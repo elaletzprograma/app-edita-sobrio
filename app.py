@@ -12,11 +12,11 @@ from xhtml2pdf import pisa
 from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
-# Si st.experimental_rerun no existe, lo definimos con un valor por defecto para rerun_data.
+# FALLBACK: si no existe experimental_rerun, lo definimos (compatible con versiones antiguas)
 if not hasattr(st, "experimental_rerun"):
     from streamlit.runtime.scriptrunner.script_runner import RerunException
     def experimental_rerun():
-        raise RerunException(rerun_data={})
+        raise RerunException({})  # sin nombre de argumento
     st.experimental_rerun = experimental_rerun
 
 # --------------------------------------------------------------------
@@ -38,7 +38,6 @@ class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
             raise language_tool_python.utils.LanguageToolError(response.content.decode())
         return response.json()
 
-# Nota: Si la API gratuita devuelve "Upgrade Required", se captura el error en analizar_texto.
 tool = LanguageToolPost('es')
 
 # --------------------------------------------------------------------
@@ -51,6 +50,7 @@ if os.path.exists(USERS_FILE):
 else:
     users = {}
 
+# Forzar la existencia del usuario administrador
 if "alesongs@gmail.com" not in users:
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
@@ -78,74 +78,25 @@ if "show_repeticiones_totales" not in st.session_state:
     st.session_state["show_repeticiones_totales"] = True
 if "show_rimas_parciales" not in st.session_state:
     st.session_state["show_rimas_parciales"] = True
-if "analysis_done" not in st.session_state:
-    st.session_state["analysis_done"] = False
-if "edit_mode" not in st.session_state:
-    st.session_state["edit_mode"] = False
 if "rerun_flag" not in st.session_state:
     st.session_state["rerun_flag"] = False
 
-# --- Si se activa la bandera de rerun, se reinicia la app ---
-if st.session_state.get("rerun_flag", False):
-    st.session_state["rerun_flag"] = False
-    st.experimental_rerun()
-
 # --------------------------------------------------------------------
-# Sidebar con checkboxes dinámicos con recuento y estilo
+# Sidebar: Casillas de configuración con sus contadores (evitamos asignar a session_state)
 # --------------------------------------------------------------------
 st.sidebar.header("Opciones del análisis")
 
-checkboxes = {
-    "show_adverbios": {"label": "Mostrar adverbios", "default": True, "style": "color: green;"},
-    "show_adjetivos": {"label": "Mostrar adjetivos", "default": True, "style": "background-color: pink;"},
-    "show_repeticiones_totales": {"label": "Mostrar repeticiones totales", "default": True, "style": "background-color: orange;"},
-    "show_rimas_parciales": {"label": "Mostrar rimas parciales", "default": True, "style": "background-color: #ffcc80;"},
-    "show_dobles_verbos": {"label": "Mostrar dobles verbos", "default": True, "style": "background-color: #dab4ff;"},
-    "show_preterito_compuesto": {"label": "Mostrar pretérito compuesto", "default": True, "style": "background-color: lightblue;"},
-    "show_orthography": {"label": "Mostrar errores ortográficos", "default": False, "style": "text-decoration: underline wavy red;"},
-    "show_grammar": {"label": "Mostrar errores gramaticales", "default": False, "style": "text-decoration: underline wavy yellow;"}
-}
+# Ejemplo de cómo crear la casilla con key, valor por defecto y ocultando el label
+show_adverbios = st.sidebar.checkbox("Mostrar adverbios", key="show_adverbios", value=st.session_state.get("show_adverbios", True))
+show_adjetivos = st.sidebar.checkbox("Mostrar adjetivos", key="show_adjetivos", value=st.session_state.get("show_adjetivos", True))
+show_repeticiones_totales = st.sidebar.checkbox("Mostrar repeticiones totales", key="show_repeticiones_totales", value=st.session_state.get("show_repeticiones_totales", True))
+show_rimas_parciales = st.sidebar.checkbox("Mostrar rimas parciales", key="show_rimas_parciales", value=st.session_state.get("show_rimas_parciales", True))
+show_dobles_verbos = st.sidebar.checkbox("Mostrar dobles verbos", key="show_dobles_verbos", value=st.session_state.get("show_dobles_verbos", True))
+show_preterito_compuesto = st.sidebar.checkbox("Mostrar pretérito compuesto", key="show_preterito_compuesto", value=st.session_state.get("show_preterito_compuesto", True))
+show_orthography = st.sidebar.checkbox("Mostrar errores ortográficos", key="show_orthography", value=st.session_state.get("show_orthography", False))
+show_grammar = st.sidebar.checkbox("Mostrar errores gramaticales", key="show_grammar", value=st.session_state.get("show_grammar", False))
 
-mapping_counts = {
-    "show_adverbios": "adverbios",
-    "show_adjetivos": "adjetivos",
-    "show_repeticiones_totales": "repeticiones_totales",
-    "show_rimas_parciales": "rimas_parciales",
-    "show_dobles_verbos": "dobles_verbos",
-    "show_preterito_compuesto": "pretérito_compuesto",
-    "show_orthography": "ortografía",
-    "show_grammar": "gramática"
-}
-
-for key, data in checkboxes.items():
-    count = 0
-    if "marca_counts" in st.session_state:
-        count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
-    col1, col2 = st.sidebar.columns([1, 4])
-    # Se asigna un label no vacío (" ") y se oculta visualmente.
-    _ = col1.checkbox(" ", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
-    col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
-
-# --------------------------------------------------------------------
-# Función para enviar email usando SendGrid
-# --------------------------------------------------------------------
-def send_email(to_email, subject, body):
-    try:
-        sg = sendgrid.SendGridAPIClient(api_key=st.secrets["sendgrid"]["api_key"])
-        from_email = st.secrets["sendgrid"].get("from_email", "noreply@tusitio.com")
-        message = Mail(
-            from_email=from_email,
-            to_emails=to_email,
-            subject=subject,
-            plain_text_content=body
-        )
-        response = sg.send(message)
-        if response.status_code in [200, 202]:
-            st.success(f"Email enviado a {to_email}")
-        else:
-            st.error(f"Error al enviar email: {response.status_code}")
-    except Exception as e:
-        st.error(f"Error al enviar email: {e}")
+# Si tienes alguna sección para mostrar los contadores con colores, asegúrate de usar el valor que ya actualiza el widget (sin reescribir session_state).
 
 # --------------------------------------------------------------------
 # Funciones para el análisis del texto
@@ -180,11 +131,7 @@ def common_suffix(word1, word2, min_len=3):
 
 def analizar_texto(texto):
     doc = nlp(texto)
-    try:
-        lt_matches = tool.check(texto)
-    except language_tool_python.utils.LanguageToolError as e:
-        st.warning("LanguageTool error: " + str(e))
-        lt_matches = []
+    lt_matches = tool.check(texto)
     tokens_data = []
     for i, token in enumerate(doc):
         corrected = correct_pos(token.text, str(token.pos_))
@@ -413,6 +360,7 @@ def clean_text(html_text):
 analysis_done = st.session_state.get("analysis_done", False)
 edit_mode = st.session_state.get("edit_mode", False)
 
+# --- MODO INICIAL: Área para pegar el texto a analizar ---
 if not analysis_done:
     st.markdown("### Pega aquí tu obra maestra")
     texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -422,14 +370,14 @@ if not analysis_done:
             tokens_data,
             lt_data,
             original_text,
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
+            show_adverbios,
+            show_adjetivos,
+            show_repeticiones_totales,
+            show_rimas_parciales,
+            show_dobles_verbos,
+            show_preterito_compuesto,
+            show_orthography,
+            show_grammar
         )
         st.session_state["tokens_data"] = tokens_data
         st.session_state["lt_data"] = lt_data
@@ -438,22 +386,23 @@ if not analysis_done:
         st.session_state["analysis_done"] = True
         st.session_state["edit_mode"] = False
         st.session_state["marca_counts"] = marca_counts
-        st.session_state["rerun_flag"] = True
+        st.experimental_rerun()
 
+# --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
 elif not edit_mode:
     st.markdown("### Texto analizado (no editable)")
     html_result, marca_counts = construir_html(
         st.session_state["tokens_data"],
         st.session_state["lt_data"],
         st.session_state["original_text"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
+        show_adverbios,
+        show_adjetivos,
+        show_repeticiones_totales,
+        show_rimas_parciales,
+        show_dobles_verbos,
+        show_preterito_compuesto,
+        show_orthography,
+        show_grammar
     )
     st.session_state["resultado_html"] = html_result
     st.session_state["marca_counts"] = marca_counts
@@ -462,7 +411,7 @@ elif not edit_mode:
     with colA:
         if st.button("Editar"):
             st.session_state["edit_mode"] = True
-            st.session_state["rerun_flag"] = True
+            st.experimental_rerun()
     with colB:
         if st.button("Exportar a PDF"):
             marca = st.session_state.get("marca_counts", {})
@@ -494,6 +443,7 @@ elif not edit_mode:
             with open(pdf_path, "rb") as f:
                 st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
+# --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
 else:
     st.markdown("### Texto analizado (editable)")
     with st.form("editor_form"):
@@ -512,14 +462,14 @@ else:
             tokens_data,
             lt_data,
             original_text,
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
+            show_adverbios,
+            show_adjetivos,
+            show_repeticiones_totales,
+            show_rimas_parciales,
+            show_dobles_verbos,
+            show_preterito_compuesto,
+            show_orthography,
+            show_grammar
         )
         st.session_state["tokens_data"] = tokens_data
         st.session_state["lt_data"] = lt_data
@@ -527,21 +477,23 @@ else:
         st.session_state["resultado_html"] = final_html
         st.session_state["marca_counts"] = marca_counts
         st.session_state["edit_mode"] = False
+        st.experimental_rerun()
     elif return_btn:
         st.session_state["edit_mode"] = False
+        st.experimental_rerun()
     elif export_btn:
         html_result, marca_counts = construir_html(
             st.session_state["tokens_data"],
             st.session_state["lt_data"],
             st.session_state["original_text"],
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
+            show_adverbios,
+            show_adjetivos,
+            show_repeticiones_totales,
+            show_rimas_parciales,
+            show_dobles_verbos,
+            show_preterito_compuesto,
+            show_orthography,
+            show_grammar
         )
         adverbios_count = marca_counts.get("adverbios", 0)
         adjetivos_count = marca_counts.get("adjetivos", 0)
@@ -570,8 +522,3 @@ else:
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
-
-# --- Si se activó la bandera de rerun, se reinicia la app ---
-if st.session_state.get("rerun_flag", False):
-    st.session_state["rerun_flag"] = False
-    st.experimental_rerun()
