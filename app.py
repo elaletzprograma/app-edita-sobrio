@@ -20,7 +20,7 @@ nlp = spacy.load("es_core_news_md")
 # --------------------------------------------------------------------
 # Inicializa LanguageTool para español
 # --------------------------------------------------------------------
-tool = language_tool_python.LanguageTool("es")
+tool = language_tool_python.LanguageToolPublicAPI("es")
 
 # --------------------------------------------------------------------
 # Configuración de usuarios para login local usando un archivo JSON
