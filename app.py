@@ -115,7 +115,8 @@ for key, data in checkboxes.items():
     if "marca_counts" in st.session_state:
         count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
     col1, col2 = st.sidebar.columns([1, 4])
-    current_val = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
+    # Creamos el checkbox; no asignamos manualmente el valor a st.session_state.
+    _ = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
     col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
@@ -430,7 +431,7 @@ if not analysis_done:
         st.session_state["analysis_done"] = True
         st.session_state["edit_mode"] = False
         st.session_state["marca_counts"] = marca_counts
-        st.experimental_rerun()
+        st.session_state["rerun_flag"] = True
 
 elif not edit_mode:
     st.markdown("### Texto analizado (no editable)")
@@ -454,7 +455,7 @@ elif not edit_mode:
     with colA:
         if st.button("Editar"):
             st.session_state["edit_mode"] = True
-            st.experimental_rerun()
+            st.session_state["rerun_flag"] = True
     with colB:
         if st.button("Exportar a PDF"):
             marca = st.session_state.get("marca_counts", {})
@@ -562,3 +563,8 @@ else:
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+
+# --- Si se activó la bandera de rerun, se reinicia la app ---
+if st.session_state.get("rerun_flag", False):
+    st.session_state["rerun_flag"] = False
+    st.experimental_rerun()
