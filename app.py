@@ -31,6 +31,7 @@ class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
             raise language_tool_python.utils.LanguageToolError(response.content.decode())
         return response.json()
 
+# Nota: Si la API gratuita da "Upgrade Required", se capturará el error en analizar_texto.
 tool = LanguageToolPost('es')
 
 # --------------------------------------------------------------------
@@ -107,8 +108,8 @@ for key, data in checkboxes.items():
     if "marca_counts" in st.session_state:
         count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
     col1, col2 = st.sidebar.columns([1, 4])
-    # El widget checkbox actualiza automáticamente st.session_state usando la key
-    current_val = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key)
+    # Usamos label_visibility="hidden" para evitar warnings por label vacío
+    current_val = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
     col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------
@@ -165,7 +166,11 @@ def common_suffix(word1, word2, min_len=3):
 
 def analizar_texto(texto):
     doc = nlp(texto)
-    lt_matches = tool.check(texto)
+    try:
+        lt_matches = tool.check(texto)
+    except language_tool_python.utils.LanguageToolError as e:
+        st.warning("LanguageTool error: " + str(e))
+        lt_matches = []
     tokens_data = []
     for i, token in enumerate(doc):
         corrected = correct_pos(token.text, str(token.pos_))
@@ -419,7 +424,7 @@ if not analysis_done:
         st.session_state["analysis_done"] = True
         st.session_state["edit_mode"] = False
         st.session_state["marca_counts"] = marca_counts
-        st.rerun()
+        st.experimental_rerun()
 
 elif not edit_mode:
     st.markdown("### Texto analizado (no editable)")
@@ -443,7 +448,7 @@ elif not edit_mode:
     with colA:
         if st.button("Editar"):
             st.session_state["edit_mode"] = True
-            st.rerun()
+            st.experimental_rerun()
     with colB:
         if st.button("Exportar a PDF"):
             marca = st.session_state.get("marca_counts", {})
@@ -508,10 +513,10 @@ else:
         st.session_state["resultado_html"] = final_html
         st.session_state["marca_counts"] = marca_counts
         st.session_state["edit_mode"] = False
-        st.rerun()
+        st.experimental_rerun()
     elif return_btn:
         st.session_state["edit_mode"] = False
-        st.rerun()
+        st.experimental_rerun()
     elif export_btn:
         html_result, marca_counts = construir_html(
             st.session_state["tokens_data"],
