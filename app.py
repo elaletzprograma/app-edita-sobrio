@@ -35,11 +35,9 @@ class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
 
 tool = LanguageToolPost('es')
 
-
-
-
 # --------------------------------------------------------------------
 # Configuración de usuarios para login local usando un archivo JSON
+# --------------------------------------------------------------------
 USERS_FILE = "users.json"
 if os.path.exists(USERS_FILE):
     with open(USERS_FILE, "r") as f:
@@ -75,6 +73,18 @@ if "show_repeticiones_totales" not in st.session_state:
     st.session_state["show_repeticiones_totales"] = True
 if "show_rimas_parciales" not in st.session_state:
     st.session_state["show_rimas_parciales"] = True
+
+# Sidebar con las casillas para activar/desactivar funcionalidades
+st.sidebar.header("Opciones del análisis")
+
+st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", st.session_state.get("show_adverbios", True))
+st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", st.session_state.get("show_adjetivos", True))
+st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", st.session_state.get("show_repeticiones_totales", True))
+st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", st.session_state.get("show_rimas_parciales", True))
+st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", st.session_state.get("show_dobles_verbos", True))
+st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
+st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
+st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
 
 # --------------------------------------------------------------------
 # Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
@@ -369,14 +379,14 @@ if not analysis_done:
             tokens_data,
             lt_data,
             original_text,
-        st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", value=True, label_visibility="collapsed")
-        st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", value=True, label_visibility="collapsed")
-        st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", value=True, label_visibility="collapsed")
-        st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", value=True, label_visibility="collapsed")
-        st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", value=True, label_visibility="collapsed")
-        st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", value=True, label_visibility="collapsed")
-        st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", value=False, label_visibility="collapsed")
-        st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", value=False, label_visibility="collapsed")
+            st.session_state["show_adverbios"],
+            st.session_state["show_adjetivos"],
+            st.session_state["show_repeticiones_totales"],
+            st.session_state["show_rimas_parciales"],
+            st.session_state["show_dobles_verbos"],
+            st.session_state["show_preterito_compuesto"],
+            st.session_state["show_orthography"],
+            st.session_state["show_grammar"]
         )
         st.session_state["tokens_data"] = tokens_data
         st.session_state["lt_data"] = lt_data
@@ -387,7 +397,6 @@ if not analysis_done:
         st.session_state["marca_counts"] = marca_counts
         st.rerun()
 
-
 # --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
 elif not edit_mode:
     st.markdown("### Texto analizado (no editable)")
@@ -395,14 +404,14 @@ elif not edit_mode:
         st.session_state["tokens_data"],
         st.session_state["lt_data"],
         st.session_state["original_text"],
-        st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", value=True, label_visibility="collapsed")
-        st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", value=True, label_visibility="collapsed")
-        st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", value=True, label_visibility="collapsed")
-        st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", value=True, label_visibility="collapsed")
-        st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", value=True, label_visibility="collapsed")
-        st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", value=True, label_visibility="collapsed")
-        st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", value=False, label_visibility="collapsed")
-        st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", value=False, label_visibility="collapsed")
+        st.session_state["show_adverbios"],
+        st.session_state["show_adjetivos"],
+        st.session_state["show_repeticiones_totales"],
+        st.session_state["show_rimas_parciales"],
+        st.session_state["show_dobles_verbos"],
+        st.session_state["show_preterito_compuesto"],
+        st.session_state["show_orthography"],
+        st.session_state["show_grammar"]
     )
     st.session_state["resultado_html"] = html_result
     st.session_state["marca_counts"] = marca_counts
@@ -462,14 +471,14 @@ else:
             tokens_data,
             lt_data,
             original_text,
-        st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", value=True, label_visibility="collapsed")
-        st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", value=True, label_visibility="collapsed")
-        st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", value=True, label_visibility="collapsed")
-        st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", value=True, label_visibility="collapsed")
-        st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", value=True, label_visibility="collapsed")
-        st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", value=True, label_visibility="collapsed")
-        st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", value=False, label_visibility="collapsed")
-        st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", value=False, label_visibility="collapsed")
+            st.session_state["show_adverbios"],
+            st.session_state["show_adjetivos"],
+            st.session_state["show_repeticiones_totales"],
+            st.session_state["show_rimas_parciales"],
+            st.session_state["show_dobles_verbos"],
+            st.session_state["show_preterito_compuesto"],
+            st.session_state["show_orthography"],
+            st.session_state["show_grammar"]
         )
         st.session_state["tokens_data"] = tokens_data
         st.session_state["lt_data"] = lt_data
@@ -486,14 +495,14 @@ else:
             st.session_state["tokens_data"],
             st.session_state["lt_data"],
             st.session_state["original_text"],
-            st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", value=True, label_visibility="collapsed")
-            st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", value=True, label_visibility="collapsed")
-            st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", value=True, label_visibility="collapsed")
-            st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", value=True, label_visibility="collapsed")
-            st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", value=True, label_visibility="collapsed")
-            st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", value=True, label_visibility="collapsed")
-            st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", value=False, label_visibility="collapsed")
-            st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", value=False, label_visibility="collapsed")
+            st.session_state["show_adverbios"],
+            st.session_state["show_adjetivos"],
+            st.session_state["show_repeticiones_totales"],
+            st.session_state["show_rimas_parciales"],
+            st.session_state["show_dobles_verbos"],
+            st.session_state["show_preterito_compuesto"],
+            st.session_state["show_orthography"],
+            st.session_state["show_grammar"]
         )
         adverbios_count = marca_counts.get("adverbios", 0)
         adjetivos_count = marca_counts.get("adjetivos", 0)
@@ -522,4 +531,3 @@ else:
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
-
