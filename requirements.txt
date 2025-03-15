@@ -8,5 +8,6 @@ xhtml2pdf
 streamlit-quill
 beautifulsoup4
 sendgrid
+numpy==1.26.4
 es-core-news-md @ https://github.com/explosion/spacy-models/releases/download/es_core_news_md-3.7.0/es_core_news_md-3.7.0-py3-none-any.whl
 
