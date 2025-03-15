@@ -385,7 +385,8 @@ if not analysis_done:
         st.session_state["analysis_done"] = True
         st.session_state["edit_mode"] = False
         st.session_state["marca_counts"] = marca_counts
-        st.experimental_rerun()
+        st.rerun()
+
 
 # --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
 elif not edit_mode:
@@ -410,7 +411,7 @@ elif not edit_mode:
     with colA:
         if st.button("Editar"):
             st.session_state["edit_mode"] = True
-            st.experimental_rerun()
+            st.rerun()
     with colB:
         if st.button("Exportar a PDF"):
             marca = st.session_state.get("marca_counts", {})
@@ -476,10 +477,10 @@ else:
         st.session_state["resultado_html"] = final_html
         st.session_state["marca_counts"] = marca_counts
         st.session_state["edit_mode"] = False
-        st.experimental_rerun()
+        st.rerun()
     elif return_btn:
         st.session_state["edit_mode"] = False
-        st.experimental_rerun()
+        st.rerun()
     elif export_btn:
         html_result, marca_counts = construir_html(
             st.session_state["tokens_data"],
