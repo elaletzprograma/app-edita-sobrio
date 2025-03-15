@@ -12,6 +12,13 @@ from xhtml2pdf import pisa
 from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
+# Si st.experimental_rerun no existe, lo definimos.
+if not hasattr(st, "experimental_rerun"):
+    def experimental_rerun():
+        from streamlit.runtime.scriptrunner.script_runner import RerunException
+        raise RerunException
+    st.experimental_rerun = experimental_rerun
+
 # --------------------------------------------------------------------
 # Carga el modelo spaCy en español (se asume que se instalará vía requirements.txt)
 # --------------------------------------------------------------------
@@ -78,7 +85,7 @@ if "edit_mode" not in st.session_state:
 if "rerun_flag" not in st.session_state:
     st.session_state["rerun_flag"] = False
 
-# --- Verificamos la bandera de rerun al inicio ---
+# --- Si se activa la bandera de rerun, se reinicia la app ---
 if st.session_state.get("rerun_flag", False):
     st.session_state["rerun_flag"] = False
     st.experimental_rerun()
@@ -115,7 +122,7 @@ for key, data in checkboxes.items():
     if "marca_counts" in st.session_state:
         count = st.session_state["marca_counts"].get(mapping_counts[key], 0)
     col1, col2 = st.sidebar.columns([1, 4])
-    # Creamos el checkbox; no asignamos manualmente el valor a st.session_state.
+    # Creamos el checkbox sin modificar manualmente st.session_state.
     _ = col1.checkbox("", value=st.session_state.get(key, data["default"]), key=key, label_visibility="hidden")
     col2.markdown(f"<span style='{data['style']}'>{data['label']} ({count})</span>", unsafe_allow_html=True)
 
