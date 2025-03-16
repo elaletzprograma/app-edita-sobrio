@@ -18,20 +18,13 @@ from bs4 import BeautifulSoup
 nlp = spacy.load("es_core_news_md")
 
 # --------------------------------------------------------------------
-# Inicializa LanguageTool para español
+# Inicializa LanguageTool para español con manejo de errores
 # --------------------------------------------------------------------
-class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
-    def _query_server(self, url, params=None, **kwargs):
-        import requests
-        if params:
-            response = requests.post(url, data=params)
-        else:
-            response = requests.get(url)
-        if response.status_code != 200:
-            raise language_tool_python.utils.LanguageToolError(response.content.decode())
-        return response.json()
-
-tool = LanguageToolPost('es')
+try:
+    tool = language_tool_python.LanguageTool('es')
+except language_tool_python.utils.LanguageToolError as e:
+    st.error(f"Error al inicializar LanguageTool: {e}")
+    tool = None
 
 # --------------------------------------------------------------------
 # Configuración de usuarios para login usando un archivo JSON
@@ -43,7 +36,7 @@ if os.path.exists(USERS_FILE):
 else:
     users = {}
 
-# Forzar la existencia del usuario administrador por defecto
+# Forzar la existencia del usuario administrador
 if "alesongs@gmail.com" not in users:
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
@@ -138,28 +131,32 @@ def common_suffix(word1, word2, min_len=3):
     return ""
 
 def analizar_texto(texto):
-    doc = nlp(texto)
-    lt_matches = tool.check(texto)
-    tokens_data = []
-    for i, token in enumerate(doc):
-        corrected = correct_pos(token.text, str(token.pos_))
-        tokens_data.append({
-            "i": i,
-            "text": token.text,
-            "lemma": token.lemma_,
-            "pos": corrected,
-            "morph": str(token.morph),
-            "start": token.idx,
-            "end": token.idx + len(token.text),
-            "ws": token.whitespace_,
-        })
-    lt_data = []
-    for match in lt_matches:
-        lt_data.append({
-            "start": match.offset,
-            "end": match.offset + match.errorLength,
-            "category": match.category
-        })
+    if tool is None:
+        st.error("LanguageTool no está disponible. No se pueden analizar errores gramaticales/ortográficos.")
+        lt_data = []
+    else:
+        doc = nlp(texto)
+        lt_matches = tool.check(texto)
+        tokens_data = []
+        for i, token in enumerate(doc):
+            corrected = correct_pos(token.text, str(token.pos_))
+            tokens_data.append({
+                "i": i,
+                "text": token.text,
+                "lemma": token.lemma_,
+                "pos": corrected,
+                "morph": str(token.morph),
+                "start": token.idx,
+                "end": token.idx + len(token.text),
+                "ws": token.whitespace_,
+            })
+        lt_data = []
+        for match in lt_matches:
+            lt_data.append({
+                "start": match.offset,
+                "end": match.offset + match.errorLength,
+                "category": match.category
+            })
     return tokens_data, lt_data, texto
 
 def contar_marcas(tokens_copy):
@@ -237,7 +234,7 @@ def construir_html(tokens_data, lt_data, original_text,
                     if suffix and len(suffix) > len(best_suffix):
                         best_suffix = suffix
             if show_repeticiones_totales and entire_similar:
-                tk["styles"].add("background-color: orange; text-decoration: underline;")
+                tk["styles"].add("background-color: orange; text-decoration: underline; color: black;")
             if show_rimas_parciales and not entire_similar and best_suffix:
                 tk["suffix_to_highlight"] = best_suffix
 
@@ -248,14 +245,14 @@ def construir_html(tokens_data, lt_data, original_text,
             if show_adverbios and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
                 tk["styles"].add("color: green; text-decoration: underline;")
             if show_adjetivos and tk["pos"] == "ADJ":
-                tk["styles"].add("background-color: pink; text-decoration: underline;")
+                tk["styles"].add("background-color: pink; text-decoration: underline; color: black;")
             if show_dobles_verbos:
                 if tk["lemma"] in ["empezar", "comenzar", "tratar"] and (i + 2) < length:
                     t1 = tokens_copy[i + 1]
                     t2 = tokens_copy[i + 2]
                     if t1["text"].lower() == "a" and "VerbForm=Inf" in t2["morph"]:
                         for x in [tk, t1, t2]:
-                            x["styles"].add("background-color: #dab4ff; text-decoration: underline;")
+                            x["styles"].add("background-color: #dab4ff; text-decoration: underline; color: black;")
                         tk["processed"] = True
                         t1["processed"] = True
                         t2["processed"] = True
@@ -266,7 +263,7 @@ def construir_html(tokens_data, lt_data, original_text,
                         t1 = tokens_copy[i + 1]
                         if "VerbForm=Ger" in t1["morph"]:
                             for x in [tk, t1]:
-                                x["styles"].add("background-color: #dab4ff; text-decoration: underline;")
+                                x["styles"].add("background-color: #dab4ff; text-decoration: underline; color: black;")
                             tk["processed"] = True
                             t1["processed"] = True
                             i += 2
@@ -276,7 +273,7 @@ def construir_html(tokens_data, lt_data, original_text,
                     t1 = tokens_copy[i + 1]
                     if "VerbForm=Part" in t1["morph"]:
                         for x in [tk, t1]:
-                            x["styles"].add("background-color: lightblue; text-decoration: underline;")
+                            x["styles"].add("background-color: lightblue; text-decoration: underline; color: black;")
                         tk["processed"] = True
                         t1["processed"] = True
                         i += 2
@@ -316,7 +313,7 @@ def construir_html(tokens_data, lt_data, original_text,
                                 postfix = word[pos+len(suffix):]
                                 partial_html = (
                                     f"{prefix}"
-                                    f"<span style='background-color: #ffcc80; text-decoration: underline;'>"
+                                    f"<span style='background-color: #ffcc80; text-decoration: underline; color: black;'>"
                                     f"{matched}</span>"
                                     f"{postfix}{tk['ws']}"
                                 )
@@ -371,15 +368,15 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
     if show_adverbios:
         legend_items.append(f"<li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({marca_counts.get('adverbios', 0)})</span></li>")
     if show_adjetivos:
-        legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline; color: black;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
     if show_repeticiones_totales:
-        legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline; color: black;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
     if show_rimas_parciales:
-        legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline; color: black;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
     if show_dobles_verbos:
-        legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline; color: black;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
     if show_preterito_compuesto:
-        legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline; color: black;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
     if show_orthography:
         legend_items.append(f"<li><span style='text-decoration: underline wavy red;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
     if show_grammar:
@@ -398,6 +395,8 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
 # --------------------------------------------------------------------
 # Lógica principal de la app
 # --------------------------------------------------------------------
+st.title("Edita sobrio")  # Título principal en todas las vistas
+
 if not st.session_state["authenticated"]:
     st.markdown("### Iniciar Sesión")
     email = st.text_input("Email")
@@ -500,7 +499,7 @@ else:
                 st.session_state["marca_counts"] = marca_counts
                 st.rerun()
         elif not st.session_state["edit_mode"]:
-            st.markdown("### Texto analizado (no editable)")
+            st.markdown("### Texto analizado")
             html_result, marca_counts = construir_html(
                 st.session_state["tokens_data"],
                 st.session_state["lt_data"],
@@ -538,11 +537,11 @@ else:
                         <strong>Funcionalidades y Colores:</strong>
                         <ul style="list-style-type: none; padding: 0;">
                             <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                            <li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
-                            <li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                            <li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
-                            <li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
-                            <li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                            <li><span style='background-color: pink; text-decoration: underline; color: black;'>Adjetivos ({adjetivos_count})</span></li>
+                            <li><span style='background-color: orange; text-decoration: underline; color: black;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                            <li><span style='background-color: #ffcc80; text-decoration: underline; color: black;'>Rimas Parciales ({rimas_count})</span></li>
+                            <li><span style='background-color: #dab4ff; text-decoration: underline; color: black;'>Dobles Verbos ({dobles_count})</span></li>
+                            <li><span style='background-color: lightblue; text-decoration: underline; color: black;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
                             <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
                             <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
                         </ul>
@@ -616,11 +615,11 @@ else:
                     <strong>Funcionalidades y Colores:</strong>
                     <ul style="list-style-type: none; padding: 0;">
                         <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                        <li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
-                        <li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                        <li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
-                        <li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
-                        <li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                        <li><span style='background-color: pink; text-decoration: underline; color: black;'>Adjetivos ({adjetivos_count})</span></li>
+                        <li><span style='background-color: orange; text-decoration: underline; color: black;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                        <li><span style='background-color: #ffcc80; text-decoration: underline; color: black;'>Rimas Parciales ({rimas_count})</span></li>
+                        <li><span style='background-color: #dab4ff; text-decoration: underline; color: black;'>Dobles Verbos ({dobles_count})</span></li>
+                        <li><span style='background-color: lightblue; text-decoration: underline; color: black;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
                         <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
                         <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
                     </ul>
