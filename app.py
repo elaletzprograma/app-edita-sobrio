@@ -145,11 +145,9 @@ def analizar_texto(texto):
             "end": token.idx + len(token.text),
             "ws": token.whitespace_,
         })
-    
     lt_data = []
     if tool is not None:
         try:
-            # Dividir el texto en bloques de 1000 caracteres
             max_length = 1000
             text_blocks = [texto[i:i+max_length] for i in range(0, len(texto), max_length)]
             offset = 0
@@ -166,7 +164,6 @@ def analizar_texto(texto):
             st.warning(f"No se pudo realizar la corrección gramatical: {e}")
     else:
         st.warning("LanguageTool no está disponible. No se pueden analizar errores gramaticales/ortográficos.")
-    
     return tokens_data, lt_data, texto
 
 def contar_marcas(tokens_copy):
@@ -212,7 +209,6 @@ def construir_html(tokens_data, lt_data, original_text,
         tcopy["suffix_to_highlight"] = ""
         tokens_copy.append(tcopy)
     length = len(tokens_copy)
-
     if show_orthography or show_grammar:
         for ltmatch in lt_data:
             start_m = ltmatch["start"]
@@ -224,7 +220,6 @@ def construir_html(tokens_data, lt_data, original_text,
                         tk["styles"].add("text-decoration: underline wavy red;")
                     if show_grammar and cat == "GRAMMAR":
                         tk["styles"].add("text-decoration: underline wavy yellow;")
-
     for i, tk in enumerate(tokens_copy):
         if tk["pos"] in {"NOUN", "ADJ", "VERB"}:
             start_w = max(0, i - 45)
@@ -247,7 +242,6 @@ def construir_html(tokens_data, lt_data, original_text,
                 tk["styles"].add("background-color: orange; text-decoration: underline; color: black;")
             if show_rimas_parciales and not entire_similar and best_suffix:
                 tk["suffix_to_highlight"] = best_suffix
-
     i = 0
     while i < length:
         tk = tokens_copy[i]
@@ -289,13 +283,11 @@ def construir_html(tokens_data, lt_data, original_text,
                         i += 2
                         continue
         i += 1
-
     paragraphs = original_text.split("\n\n")
     total_tokens = len(tokens_copy)
     global_index = 0
     current_offset = 0
     html_result = ""
-
     for paragraph in paragraphs:
         lines = paragraph.split("\n")
         paragraph_html = ""
@@ -304,7 +296,6 @@ def construir_html(tokens_data, lt_data, original_text,
             line_length = len(line)
             line_start_offset = current_offset
             line_end_offset = current_offset + line_length
-
             while global_index < total_tokens and tokens_copy[global_index]["start"] < line_end_offset:
                 tk = tokens_copy[global_index]
                 if tk["end"] <= line_start_offset:
@@ -321,13 +312,12 @@ def construir_html(tokens_data, lt_data, original_text,
                                 prefix = word[:pos]
                                 matched = word[pos:pos+len(suffix)]
                                 postfix = word[pos+len(suffix):]
-                                partial_html = (
+                                line_html += (
                                     f"{prefix}"
                                     f"<span style='background-color: #ffcc80; text-decoration: underline; color: black;'>"
                                     f"{matched}</span>"
                                     f"{postfix}{tk['ws']}"
                                 )
-                                line_html += partial_html
                                 global_index += 1
                                 continue
                     if tk["styles"]:
@@ -345,17 +335,14 @@ def construir_html(tokens_data, lt_data, original_text,
                     else:
                         line_html += tk["text"] + tk["ws"]
                     global_index += 1
-
             paragraph_html += line_html
             if line != lines[-1]:
                 paragraph_html += "<br>"
             current_offset += line_length
             if line != lines[-1]:
                 current_offset += 1
-
         html_result += f"<p>{paragraph_html}</p>"
         current_offset += 2
-
     marca_counts = contar_marcas(tokens_copy)
     return html_result, marca_counts
 
@@ -422,18 +409,12 @@ if not st.session_state["authenticated"]:
         else:
             st.error("Email o contraseña incorrectos")
 else:
-    # Botón adicional para administradores en la interfaz principal
-    if st.session_state["is_admin"] and not st.session_state["show_admin_panel"]:
-        if st.button("Ir al Panel de Administración"):
-            st.session_state["show_admin_panel"] = True
-            st.rerun()
-
-    # Sidebar para usuarios autenticados
+    # Para administradores, usamos un radio button en la sidebar para cambiar entre panel y análisis
     if st.session_state["is_admin"]:
-        st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']} (Admin)")
-        if st.sidebar.button("Panel de Administración"):
+        opcion = st.sidebar.radio("Seleccione una opción:", ("Panel de Administración", "Análisis de Texto"))
+        if opcion == "Panel de Administración":
             st.session_state["show_admin_panel"] = True
-        if st.sidebar.button("Análisis de Texto"):
+        else:
             st.session_state["show_admin_panel"] = False
     else:
         st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']}")
@@ -471,8 +452,7 @@ else:
         st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
         st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
         st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
-
-        # Mostrar leyenda en sidebar si hay análisis
+        
         if st.session_state.get("analysis_done", False):
             leyenda_html = generar_leyenda(
                 st.session_state.get("marca_counts", {}),
@@ -486,8 +466,7 @@ else:
                 st.session_state["show_grammar"]
             )
             st.sidebar.markdown(leyenda_html, unsafe_allow_html=True)
-
-        # Lógica de análisis de texto
+        
         if not st.session_state["analysis_done"]:
             st.markdown("### Pega aquí tu obra maestra")
             texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -646,7 +625,6 @@ else:
                 with open(pdf_path, "rb") as f:
                     st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
-    # Botón para cerrar sesión
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["authenticated"] = False
         st.session_state["user_email"] = ""
