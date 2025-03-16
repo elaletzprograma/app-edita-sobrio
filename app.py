@@ -14,14 +14,14 @@ from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
 # Función auxiliar para forzar un reinicio de la app.
-# Usa st.experimental_rerun() o, si no está disponible, la API interna.
+# Si st.experimental_rerun() no existe, se usa un hack con query_params y st.stop()
 # --------------------------------------------------------------------
 def my_rerun():
     try:
         st.experimental_rerun()
     except AttributeError:
-        from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
-        get_script_run_ctx().request_rerun()
+        st.experimental_set_query_params(rerun="1")
+        st.stop()
 
 # --------------------------------------------------------------------
 # Título de la app (aparece en todos los modos)
@@ -104,7 +104,7 @@ if "marca_counts" not in st.session_state:
     }
 
 # --------------------------------------------------------------------
-# Sidebar: opciones del análisis (solo si el usuario ya está logueado)
+# Sidebar: Opciones del análisis (solo si el usuario está logueado)
 # --------------------------------------------------------------------
 def show_analysis_options():
     st.sidebar.header("Opciones del análisis")
@@ -134,7 +134,7 @@ def show_analysis_options():
     )
 
 # --------------------------------------------------------------------
-# Función para enviar email usando SendGrid (usando secrets en la nube)
+# Función para enviar email usando SendGrid (usa los secrets)
 # --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
