@@ -13,28 +13,21 @@ from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
-# Carga el modelo spaCy en español (se asume que se instalará vía requirements.txt)
+# Carga el modelo spaCy en español
 # --------------------------------------------------------------------
 nlp = spacy.load("es_core_news_md")
 
 # --------------------------------------------------------------------
-# Inicializa LanguageTool para español
+# Inicializa LanguageTool para español usando un servidor remoto
 # --------------------------------------------------------------------
-class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
-    def _query_server(self, url, params=None, **kwargs):
-        import requests
-        if params:
-            response = requests.post(url, data=params)
-        else:
-            response = requests.get(url)
-        if response.status_code != 200:
-            raise language_tool_python.utils.LanguageToolError(response.content.decode())
-        return response.json()
-
-tool = LanguageToolPost('es')
+try:
+    tool = language_tool_python.LanguageTool('es', remote_server='https://languagetool.org/api/')
+except language_tool_python.utils.LanguageToolError as e:
+    st.error(f"Error al inicializar LanguageTool: {e}")
+    tool = None
 
 # --------------------------------------------------------------------
-# Configuración de usuarios para login local usando un archivo JSON
+# Configuración de usuarios para login usando un archivo JSON
 # --------------------------------------------------------------------
 USERS_FILE = "users.json"
 if os.path.exists(USERS_FILE):
@@ -49,7 +42,8 @@ if "alesongs@gmail.com" not in users:
     users["alesongs@gmail.com"] = {
         "nombre": "Administrador",
         "email": "alesongs@gmail.com",
-        "password": hashed_admin
+        "password": hashed_admin,
+        "is_admin": True
     }
     with open(USERS_FILE, "w") as f:
         json.dump(users, f)
@@ -67,25 +61,13 @@ if "is_admin" not in st.session_state:
     st.session_state["is_admin"] = False
 if "show_admin_panel" not in st.session_state:
     st.session_state["show_admin_panel"] = False
-if "show_repeticiones_totales" not in st.session_state:
-    st.session_state["show_repeticiones_totales"] = True
-if "show_rimas_parciales" not in st.session_state:
-    st.session_state["show_rimas_parciales"] = True
-
-# Sidebar con las casillas para activar/desactivar funcionalidades
-st.sidebar.header("Opciones del análisis")
-
-st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", st.session_state.get("show_adverbios", True))
-st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", st.session_state.get("show_adjetivos", True))
-st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", st.session_state.get("show_repeticiones_totales", True))
-st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", st.session_state.get("show_rimas_parciales", True))
-st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", st.session_state.get("show_dobles_verbos", True))
-st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
-st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
-st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
+if "analysis_done" not in st.session_state:
+    st.session_state["analysis_done"] = False
+if "edit_mode" not in st.session_state:
+    st.session_state["edit_mode"] = False
 
 # --------------------------------------------------------------------
-# Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
+# Función para enviar email usando SendGrid
 # --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
@@ -104,6 +86,18 @@ def send_email(to_email, subject, body):
             st.error(f"Error al enviar email: {response.status_code}")
     except Exception as e:
         st.error(f"Error al enviar email: {e}")
+
+# --------------------------------------------------------------------
+# Función para hashear contraseñas
+# --------------------------------------------------------------------
+def hash_password(password):
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+# --------------------------------------------------------------------
+# Función para verificar contraseñas
+# --------------------------------------------------------------------
+def check_password(stored_password, provided_password):
+    return bcrypt.checkpw(provided_password.encode(), stored_password.encode())
 
 # --------------------------------------------------------------------
 # Funciones para el análisis del texto
@@ -138,7 +132,6 @@ def common_suffix(word1, word2, min_len=3):
 
 def analizar_texto(texto):
     doc = nlp(texto)
-    lt_matches = tool.check(texto)
     tokens_data = []
     for i, token in enumerate(doc):
         corrected = correct_pos(token.text, str(token.pos_))
@@ -152,13 +145,28 @@ def analizar_texto(texto):
             "end": token.idx + len(token.text),
             "ws": token.whitespace_,
         })
+    
     lt_data = []
-    for match in lt_matches:
-        lt_data.append({
-            "start": match.offset,
-            "end": match.offset + match.errorLength,
-            "category": match.category
-        })
+    if tool is not None:
+        try:
+            # Dividir el texto en bloques de 1000 caracteres
+            max_length = 1000
+            text_blocks = [texto[i:i+max_length] for i in range(0, len(texto), max_length)]
+            offset = 0
+            for block in text_blocks:
+                lt_matches = tool.check(block)
+                for match in lt_matches:
+                    lt_data.append({
+                        "start": match.offset + offset,
+                        "end": match.offset + match.errorLength + offset,
+                        "category": match.category
+                    })
+                offset += len(block)
+        except language_tool_python.utils.LanguageToolError as e:
+            st.warning(f"No se pudo realizar la corrección gramatical: {e}")
+    else:
+        st.warning("LanguageTool no está disponible. No se pueden analizar errores gramaticales/ortográficos.")
+    
     return tokens_data, lt_data, texto
 
 def contar_marcas(tokens_copy):
@@ -236,7 +244,7 @@ def construir_html(tokens_data, lt_data, original_text,
                     if suffix and len(suffix) > len(best_suffix):
                         best_suffix = suffix
             if show_repeticiones_totales and entire_similar:
-                tk["styles"].add("background-color: orange; text-decoration: underline;")
+                tk["styles"].add("background-color: orange; text-decoration: underline; color: black;")
             if show_rimas_parciales and not entire_similar and best_suffix:
                 tk["suffix_to_highlight"] = best_suffix
 
@@ -247,14 +255,14 @@ def construir_html(tokens_data, lt_data, original_text,
             if show_adverbios and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
                 tk["styles"].add("color: green; text-decoration: underline;")
             if show_adjetivos and tk["pos"] == "ADJ":
-                tk["styles"].add("background-color: pink; text-decoration: underline;")
+                tk["styles"].add("background-color: pink; text-decoration: underline; color: black;")
             if show_dobles_verbos:
                 if tk["lemma"] in ["empezar", "comenzar", "tratar"] and (i + 2) < length:
                     t1 = tokens_copy[i + 1]
                     t2 = tokens_copy[i + 2]
                     if t1["text"].lower() == "a" and "VerbForm=Inf" in t2["morph"]:
                         for x in [tk, t1, t2]:
-                            x["styles"].add("background-color: #dab4ff; text-decoration: underline;")
+                            x["styles"].add("background-color: #dab4ff; text-decoration: underline; color: black;")
                         tk["processed"] = True
                         t1["processed"] = True
                         t2["processed"] = True
@@ -265,7 +273,7 @@ def construir_html(tokens_data, lt_data, original_text,
                         t1 = tokens_copy[i + 1]
                         if "VerbForm=Ger" in t1["morph"]:
                             for x in [tk, t1]:
-                                x["styles"].add("background-color: #dab4ff; text-decoration: underline;")
+                                x["styles"].add("background-color: #dab4ff; text-decoration: underline; color: black;")
                             tk["processed"] = True
                             t1["processed"] = True
                             i += 2
@@ -275,7 +283,7 @@ def construir_html(tokens_data, lt_data, original_text,
                     t1 = tokens_copy[i + 1]
                     if "VerbForm=Part" in t1["morph"]:
                         for x in [tk, t1]:
-                            x["styles"].add("background-color: lightblue; text-decoration: underline;")
+                            x["styles"].add("background-color: lightblue; text-decoration: underline; color: black;")
                         tk["processed"] = True
                         t1["processed"] = True
                         i += 2
@@ -315,7 +323,7 @@ def construir_html(tokens_data, lt_data, original_text,
                                 postfix = word[pos+len(suffix):]
                                 partial_html = (
                                     f"{prefix}"
-                                    f"<span style='background-color: #ffcc80; text-decoration: underline;'>"
+                                    f"<span style='background-color: #ffcc80; text-decoration: underline; color: black;'>"
                                     f"{matched}</span>"
                                     f"{postfix}{tk['ws']}"
                                 )
@@ -362,32 +370,32 @@ def clean_text(html_text):
     return soup.get_text(separator="\n")
 
 # --------------------------------------------------------------------
-# Función para generar la leyenda de colores
+# Función para generar la leyenda de colores con mejor contraste
 # --------------------------------------------------------------------
 def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticiones_totales, show_rimas_parciales,
                     show_dobles_verbos, show_preterito_compuesto, show_orthography, show_grammar):
     legend_items = []
     if show_adverbios:
-        legend_items.append(f"<li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({marca_counts.get('adverbios', 0)})</span></li>")
+        legend_items.append(f"<li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({marca_counts.get('adverbios', 0)})</span></li>")
     if show_adjetivos:
-        legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
     if show_repeticiones_totales:
-        legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
     if show_rimas_parciales:
-        legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
     if show_dobles_verbos:
-        legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
     if show_preterito_compuesto:
-        legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
     if show_orthography:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy red;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
+        legend_items.append(f"<li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
     if show_grammar:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy yellow;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
+        legend_items.append(f"<li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
     
     legend_html = f"""
-    <div style="margin-bottom:20px;">
+    <div style="margin-top: 20px; padding: 10px; background-color: #e0e0e0; border-radius: 5px; border: 1px solid #ccc;">
         <strong>Leyenda de Análisis:</strong>
-        <ul style="list-style-type: none; padding: 0;">
+        <ul style="list-style-type: none; padding: 0; margin: 0;">
             {''.join(legend_items)}
         </ul>
     </div>
@@ -397,196 +405,252 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
 # --------------------------------------------------------------------
 # Lógica principal de la app
 # --------------------------------------------------------------------
-analysis_done = st.session_state.get("analysis_done", False)
-edit_mode = st.session_state.get("edit_mode", False)
+st.title("Edita sobrio")  # Título principal en todas las vistas
 
-# --- MODO INICIAL: Área para pegar el texto a analizar ---
-if not analysis_done:
-    st.markdown("### Pega aquí tu obra maestra")
-    texto_inicial = st.text_area("", height=300, label_visibility="hidden")
-    if st.button("Analizar"):
-        tokens_data, lt_data, original_text = analizar_texto(texto_inicial)
-        final_html, marca_counts = construir_html(
-            tokens_data,
-            lt_data,
-            original_text,
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
-        )
-        st.session_state["tokens_data"] = tokens_data
-        st.session_state["lt_data"] = lt_data
-        st.session_state["original_text"] = original_text
-        st.session_state["resultado_html"] = final_html
-        st.session_state["analysis_done"] = True
-        st.session_state["edit_mode"] = False
-        st.session_state["marca_counts"] = marca_counts
-        st.rerun()
-
-# --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
-elif not edit_mode:
-    # Generar y mostrar la leyenda
-    leyenda_html = generar_leyenda(
-        st.session_state["marca_counts"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.markdown(leyenda_html, unsafe_allow_html=True)
-    
-    st.markdown("### Texto analizado (no editable)")
-    html_result, marca_counts = construir_html(
-        st.session_state["tokens_data"],
-        st.session_state["lt_data"],
-        st.session_state["original_text"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.session_state["resultado_html"] = html_result
-    st.session_state["marca_counts"] = marca_counts
-    st.markdown(html_result, unsafe_allow_html=True)
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("Editar"):
-            st.session_state["edit_mode"] = True
+if not st.session_state["authenticated"]:
+    st.markdown("### Iniciar Sesión")
+    email = st.text_input("Email")
+    password = st.text_input("Contraseña", type="password")
+    if st.button("Iniciar Sesión"):
+        if email in users and check_password(users[email]["password"], password):
+            st.session_state["authenticated"] = True
+            st.session_state["user_email"] = email
+            st.session_state["nombre"] = users[email]["nombre"]
+            st.session_state["is_admin"] = users[email].get("is_admin", False)
+            st.success(f"Bienvenido, {st.session_state['nombre']}")
             st.rerun()
-    with colB:
-        if st.button("Exportar a PDF"):
-            marca = st.session_state.get("marca_counts", {})
-            adverbios_count = marca.get("adverbios", 0)
-            adjetivos_count = marca.get("adjetivos", 0)
-            rep_totales_count = marca.get("repeticiones_totales", 0)
-            rimas_count = marca.get("rimas_parciales", 0)
-            dobles_count = marca.get("dobles_verbos", 0)
-            preterito_count = marca.get("pretérito_compuesto", 0)
-            ortografia_count = marca.get("ortografía", 0)
-            gramatica_count = marca.get("gramática", 0)
-            legend_html = f"""
-            <div style="margin-bottom:20px;">
-                <strong>Funcionalidades y Colores:</strong>
-                <ul style="list-style-type: none; padding: 0;">
-                    <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                    <li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
-                    <li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                    <li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
-                    <li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
-                    <li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                    <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
-                    <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
-                </ul>
-            </div>
-            """
-            pdf_html = f"<html><body style='font-family: Arial;'>{legend_html}{html_result}</body></html>"
-            pdf_path = exportar_a_pdf(pdf_html)
-            with open(pdf_path, "rb") as f:
-                st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
-
-# --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
+        else:
+            st.error("Email o contraseña incorrectos")
 else:
-    # Generar y mostrar la leyenda también en modo edición
-    leyenda_html = generar_leyenda(
-        st.session_state["marca_counts"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.markdown(leyenda_html, unsafe_allow_html=True)
-    
-    st.markdown("### Texto analizado (editable)")
-    with st.form("editor_form"):
-        edited_html = st_quill(st.session_state["resultado_html"], key="editor_quill")
-        reanalyze_btn = st.form_submit_button("Re-Analizar texto editado")
-        return_btn = st.form_submit_button("Volver a lectura")
-        export_btn = st.form_submit_button("Exportar a PDF")
-    if reanalyze_btn:
-        plain_text = clean_text(edited_html)
-        st.session_state["tokens_data"] = None
-        st.session_state["lt_data"] = []
-        st.session_state["original_text"] = ""
-        st.session_state["resultado_html"] = ""
-        tokens_data, lt_data, original_text = analizar_texto(plain_text)
-        final_html, marca_counts = construir_html(
-            tokens_data,
-            lt_data,
-            original_text,
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
-        )
-        st.session_state["tokens_data"] = tokens_data
-        st.session_state["lt_data"] = lt_data
-        st.session_state["original_text"] = original_text
-        st.session_state["resultado_html"] = final_html
-        st.session_state["marca_counts"] = marca_counts
-        st.session_state["edit_mode"] = False
+    # Botón adicional para administradores en la interfaz principal
+    if st.session_state["is_admin"] and not st.session_state["show_admin_panel"]:
+        if st.button("Ir al Panel de Administración"):
+            st.session_state["show_admin_panel"] = True
+            st.rerun()
+
+    # Sidebar para usuarios autenticados
+    if st.session_state["is_admin"]:
+        st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']} (Admin)")
+        if st.sidebar.button("Panel de Administración"):
+            st.session_state["show_admin_panel"] = True
+        if st.sidebar.button("Análisis de Texto"):
+            st.session_state["show_admin_panel"] = False
+    else:
+        st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']}")
+
+    # Panel de administración
+    if st.session_state["is_admin"] and st.session_state["show_admin_panel"]:
+        st.markdown("### Panel de Administración")
+        st.subheader("Registrar Nuevo Usuario")
+        new_nombre = st.text_input("Nombre del nuevo usuario")
+        new_email = st.text_input("Email del nuevo usuario")
+        new_password = st.text_input("Contraseña del nuevo usuario", type="password")
+        if st.button("Registrar Usuario"):
+            if new_email not in users:
+                hashed_password = hash_password(new_password)
+                users[new_email] = {
+                    "nombre": new_nombre,
+                    "email": new_email,
+                    "password": hashed_password,
+                    "is_admin": False
+                }
+                with open(USERS_FILE, "w") as f:
+                    json.dump(users, f)
+                st.success(f"Usuario {new_email} registrado exitosamente")
+                send_email(new_email, "Bienvenido", f"Hola {new_nombre}, tu cuenta ha sido creada.")
+            else:
+                st.error("El email ya está registrado")
+    else:
+        # Área de análisis de texto
+        st.sidebar.header("Opciones del análisis")
+        st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", st.session_state.get("show_adverbios", True))
+        st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", st.session_state.get("show_adjetivos", True))
+        st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", st.session_state.get("show_repeticiones_totales", True))
+        st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", st.session_state.get("show_rimas_parciales", True))
+        st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", st.session_state.get("show_dobles_verbos", True))
+        st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
+        st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
+        st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
+
+        # Mostrar leyenda en sidebar si hay análisis
+        if st.session_state.get("analysis_done", False):
+            leyenda_html = generar_leyenda(
+                st.session_state.get("marca_counts", {}),
+                st.session_state["show_adverbios"],
+                st.session_state["show_adjetivos"],
+                st.session_state["show_repeticiones_totales"],
+                st.session_state["show_rimas_parciales"],
+                st.session_state["show_dobles_verbos"],
+                st.session_state["show_preterito_compuesto"],
+                st.session_state["show_orthography"],
+                st.session_state["show_grammar"]
+            )
+            st.sidebar.markdown(leyenda_html, unsafe_allow_html=True)
+
+        # Lógica de análisis de texto
+        if not st.session_state["analysis_done"]:
+            st.markdown("### Pega aquí tu obra maestra")
+            texto_inicial = st.text_area("", height=300, label_visibility="hidden")
+            if st.button("Analizar"):
+                tokens_data, lt_data, original_text = analizar_texto(texto_inicial)
+                final_html, marca_counts = construir_html(
+                    tokens_data,
+                    lt_data,
+                    original_text,
+                    st.session_state["show_adverbios"],
+                    st.session_state["show_adjetivos"],
+                    st.session_state["show_repeticiones_totales"],
+                    st.session_state["show_rimas_parciales"],
+                    st.session_state["show_dobles_verbos"],
+                    st.session_state["show_preterito_compuesto"],
+                    st.session_state["show_orthography"],
+                    st.session_state["show_grammar"]
+                )
+                st.session_state["tokens_data"] = tokens_data
+                st.session_state["lt_data"] = lt_data
+                st.session_state["original_text"] = original_text
+                st.session_state["resultado_html"] = final_html
+                st.session_state["analysis_done"] = True
+                st.session_state["edit_mode"] = False
+                st.session_state["marca_counts"] = marca_counts
+                st.rerun()
+        elif not st.session_state["edit_mode"]:
+            st.markdown("### Texto analizado")
+            html_result, marca_counts = construir_html(
+                st.session_state["tokens_data"],
+                st.session_state["lt_data"],
+                st.session_state["original_text"],
+                st.session_state["show_adverbios"],
+                st.session_state["show_adjetivos"],
+                st.session_state["show_repeticiones_totales"],
+                st.session_state["show_rimas_parciales"],
+                st.session_state["show_dobles_verbos"],
+                st.session_state["show_preterito_compuesto"],
+                st.session_state["show_orthography"],
+                st.session_state["show_grammar"]
+            )
+            st.session_state["resultado_html"] = html_result
+            st.session_state["marca_counts"] = marca_counts
+            st.markdown(html_result, unsafe_allow_html=True)
+            colA, colB = st.columns(2)
+            with colA:
+                if st.button("Editar"):
+                    st.session_state["edit_mode"] = True
+                    st.rerun()
+            with colB:
+                if st.button("Exportar a PDF"):
+                    marca = st.session_state.get("marca_counts", {})
+                    adverbios_count = marca.get("adverbios", 0)
+                    adjetivos_count = marca.get("adjetivos", 0)
+                    rep_totales_count = marca.get("repeticiones_totales", 0)
+                    rimas_count = marca.get("rimas_parciales", 0)
+                    dobles_count = marca.get("dobles_verbos", 0)
+                    preterito_count = marca.get("pretérito_compuesto", 0)
+                    ortografia_count = marca.get("ortografía", 0)
+                    gramatica_count = marca.get("gramática", 0)
+                    legend_html = f"""
+                    <div style="margin-bottom:20px;">
+                        <strong>Funcionalidades y Colores:</strong>
+                        <ul style="list-style-type: none; padding: 0;">
+                            <li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({adverbios_count})</span></li>
+                            <li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({adjetivos_count})</span></li>
+                            <li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                            <li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({rimas_count})</span></li>
+                            <li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({dobles_count})</span></li>
+                            <li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                            <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({ortografia_count})</span></li>
+                            <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({gramatica_count})</span></li>
+                        </ul>
+                    </div>
+                    """
+                    pdf_html = f"<html><body style='font-family: Arial;'>{legend_html}{html_result}</body></html>"
+                    pdf_path = exportar_a_pdf(pdf_html)
+                    with open(pdf_path, "rb") as f:
+                        st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+        else:
+            st.markdown("### Texto analizado (editable)")
+            with st.form("editor_form"):
+                edited_html = st_quill(st.session_state["resultado_html"], key="editor_quill")
+                reanalyze_btn = st.form_submit_button("Re-Analizar texto editado")
+                return_btn = st.form_submit_button("Volver a lectura")
+                export_btn = st.form_submit_button("Exportar a PDF")
+            if reanalyze_btn:
+                plain_text = clean_text(edited_html)
+                st.session_state["tokens_data"] = None
+                st.session_state["lt_data"] = []
+                st.session_state["original_text"] = ""
+                st.session_state["resultado_html"] = ""
+                tokens_data, lt_data, original_text = analizar_texto(plain_text)
+                final_html, marca_counts = construir_html(
+                    tokens_data,
+                    lt_data,
+                    original_text,
+                    st.session_state["show_adverbios"],
+                    st.session_state["show_adjetivos"],
+                    st.session_state["show_repeticiones_totales"],
+                    st.session_state["show_rimas_parciales"],
+                    st.session_state["show_dobles_verbos"],
+                    st.session_state["show_preterito_compuesto"],
+                    st.session_state["show_orthography"],
+                    st.session_state["show_grammar"]
+                )
+                st.session_state["tokens_data"] = tokens_data
+                st.session_state["lt_data"] = lt_data
+                st.session_state["original_text"] = original_text
+                st.session_state["resultado_html"] = final_html
+                st.session_state["marca_counts"] = marca_counts
+                st.session_state["edit_mode"] = False
+                st.rerun()
+            elif return_btn:
+                st.session_state["edit_mode"] = False
+                st.rerun()
+            elif export_btn:
+                html_result, marca_counts = construir_html(
+                    st.session_state["tokens_data"],
+                    st.session_state["lt_data"],
+                    st.session_state["original_text"],
+                    st.session_state["show_adverbios"],
+                    st.session_state["show_adjetivos"],
+                    st.session_state["show_repeticiones_totales"],
+                    st.session_state["show_rimas_parciales"],
+                    st.session_state["show_dobles_verbos"],
+                    st.session_state["show_preterito_compuesto"],
+                    st.session_state["show_orthography"],
+                    st.session_state["show_grammar"]
+                )
+                adverbios_count = marca_counts.get("adverbios", 0)
+                adjetivos_count = marca_counts.get("adjetivos", 0)
+                rep_totales_count = marca_counts.get("repeticiones_totales", 0)
+                rimas_count = marca_counts.get("rimas_parciales", 0)
+                dobles_count = marca_counts.get("dobles_verbos", 0)
+                preterito_count = marca_counts.get("pretérito_compuesto", 0)
+                ortografia_count = marca_counts.get("ortografía", 0)
+                gramatica_count = marca_counts.get("gramática", 0)
+                legend_html = f"""
+                <div style="margin-bottom:20px;">
+                    <strong>Funcionalidades y Colores:</strong>
+                    <ul style="list-style-type: none; padding: 0;">
+                        <li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({adverbios_count})</span></li>
+                        <li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({adjetivos_count})</span></li>
+                        <li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                        <li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({rimas_count})</span></li>
+                        <li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({dobles_count})</span></li>
+                        <li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                        <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({ortografia_count})</span></li>
+                        <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({gramatica_count})</span></li>
+                    </ul>
+                </div>
+                """
+                pdf_html = f"<html><body style='font-family: Arial;'>{legend_html}{html_result}</body></html>"
+                pdf_path = exportar_a_pdf(pdf_html)
+                with open(pdf_path, "rb") as f:
+                    st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+
+    # Botón para cerrar sesión
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state["authenticated"] = False
+        st.session_state["user_email"] = ""
+        st.session_state["nombre"] = ""
+        st.session_state["is_admin"] = False
+        st.session_state["show_admin_panel"] = False
         st.rerun()
-    elif return_btn:
-        st.session_state["edit_mode"] = False
-        st.rerun()
-    elif export_btn:
-        html_result, marca_counts = construir_html(
-            st.session_state["tokens_data"],
-            st.session_state["lt_data"],
-            st.session_state["original_text"],
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
-        )
-        adverbios_count = marca_counts.get("adverbios", 0)
-        adjetivos_count = marca_counts.get("adjetivos", 0)
-        rep_totales_count = marca_counts.get("repeticiones_totales", 0)
-        rimas_count = marca_counts.get("rimas_parciales", 0)
-        dobles_count = marca_counts.get("dobles_verbos", 0)
-        preterito_count = marca_counts.get("pretérito_compuesto", 0)
-        ortografia_count = marca_counts.get("ortografía", 0)
-        gramatica_count = marca_counts.get("gramática", 0)
-        legend_html = f"""
-        <div style="margin-bottom:20px;">
-            <strong>Funcionalidades y Colores:</strong>
-            <ul style="list-style-type: none; padding: 0;">
-                <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                <li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
-                <li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                <li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
-                <li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
-                <li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
-                <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
-            </ul>
-        </div>
-        """
-        pdf_html = f"<html><body style='font-family: Arial;'>{legend_html}{html_result}</body></html>"
-        pdf_path = exportar_a_pdf(pdf_html)
-        with open(pdf_path, "rb") as f:
-            st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
