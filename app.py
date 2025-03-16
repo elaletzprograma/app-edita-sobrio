@@ -93,42 +93,33 @@ if "marca_counts" not in st.session_state:
     }
 
 # --------------------------------------------------------------------
-# Sidebar con las casillas para activar/desactivar funcionalidades
-# (Solo se muestran si el usuario ya está logueado)
+# Sidebar: opciones del análisis (solo si el usuario ya está logueado)
 # --------------------------------------------------------------------
 def show_analysis_options():
     st.sidebar.header("Opciones del análisis")
     st.session_state["show_adverbios"] = st.sidebar.checkbox(
-        "Mostrar adverbios", 
-        st.session_state.get("show_adverbios", True)
+        "Mostrar adverbios", st.session_state.get("show_adverbios", True)
     )
     st.session_state["show_adjetivos"] = st.sidebar.checkbox(
-        "Mostrar adjetivos", 
-        st.session_state.get("show_adjetivos", True)
+        "Mostrar adjetivos", st.session_state.get("show_adjetivos", True)
     )
     st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox(
-        "Mostrar repeticiones totales", 
-        st.session_state.get("show_repeticiones_totales", True)
+        "Mostrar repeticiones totales", st.session_state.get("show_repeticiones_totales", True)
     )
     st.session_state["show_rimas_parciales"] = st.sidebar.checkbox(
-        "Mostrar rimas parciales", 
-        st.session_state.get("show_rimas_parciales", True)
+        "Mostrar rimas parciales", st.session_state.get("show_rimas_parciales", True)
     )
     st.session_state["show_dobles_verbos"] = st.sidebar.checkbox(
-        "Mostrar dobles verbos", 
-        st.session_state.get("show_dobles_verbos", True)
+        "Mostrar dobles verbos", st.session_state.get("show_dobles_verbos", True)
     )
     st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox(
-        "Mostrar pretérito compuesto", 
-        st.session_state.get("show_preterito_compuesto", True)
+        "Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True)
     )
     st.session_state["show_orthography"] = st.sidebar.checkbox(
-        "Mostrar errores ortográficos", 
-        st.session_state.get("show_orthography", False)
+        "Mostrar errores ortográficos", st.session_state.get("show_orthography", False)
     )
     st.session_state["show_grammar"] = st.sidebar.checkbox(
-        "Mostrar errores gramaticales", 
-        st.session_state.get("show_grammar", False)
+        "Mostrar errores gramaticales", st.session_state.get("show_grammar", False)
     )
 
 # --------------------------------------------------------------------
@@ -153,7 +144,7 @@ def send_email(to_email, subject, body):
         st.error(f"Error al enviar email: {e}")
 
 # --------------------------------------------------------------------
-# Funciones para el análisis del texto (las mismas que antes)
+# Funciones para el análisis del texto
 # --------------------------------------------------------------------
 def correct_pos(token_text, spaCy_pos):
     lowered = token_text.lower()
@@ -239,10 +230,12 @@ def contar_marcas(tokens_copy):
             counts["gramática"] += 1
     return counts
 
+# --------------------------------------------------------------------
+# Construcción de la leyenda con conteo y borde punteado
+# --------------------------------------------------------------------
 def build_legend_html(counts):
     return f"""
-    <div style="padding: 10px; margin-bottom: 15px; 
-                border: 1px dashed #ccc; border-radius: 5px;">
+    <div style="padding: 10px; margin-bottom: 15px; border: 1px dashed #ccc; border-radius: 5px;">
       <strong>Leyenda de Colores:</strong><br>
       <span style="color: #7CFC00; text-decoration: underline;">
         Adverbios en -mente ({counts["adverbios"]})
@@ -316,9 +309,9 @@ def construir_html(tokens_data, lt_data, original_text,
                     suffix = common_suffix(tk["text"], other["text"], 3)
                     if suffix and len(suffix) > len(best_suffix):
                         best_suffix = suffix
-            if st.session_state["show_repeticiones_totales"] and entire_similar:
+            if show_repeticiones_totales and entire_similar:
                 tk["styles"].add("background-color: #FFA500; color: black; text-decoration: underline;")
-            if st.session_state["show_rimas_parciales"] and not entire_similar and best_suffix:
+            if show_rimas_parciales and not entire_similar and best_suffix:
                 tk["suffix_to_highlight"] = best_suffix
 
     # Adverbios, adjetivos, dobles verbos, pretérito perfecto
@@ -326,14 +319,11 @@ def construir_html(tokens_data, lt_data, original_text,
     while i < length:
         tk = tokens_copy[i]
         if not tk["processed"]:
-            # Adverbios en -mente
-            if st.session_state["show_adverbios"] and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
+            if show_adverbios and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
                 tk["styles"].add("color: #7CFC00; text-decoration: underline;")
-            # Adjetivos
-            if st.session_state["show_adjetivos"] and tk["pos"] == "ADJ":
+            if show_adjetivos and tk["pos"] == "ADJ":
                 tk["styles"].add("background-color: #FF69B4; color: black; text-decoration: underline;")
-            # Dobles verbos
-            if st.session_state["show_dobles_verbos"]:
+            if show_dobles_verbos:
                 if tk["lemma"] in ["empezar", "comenzar", "tratar"] and (i + 2) < length:
                     t1 = tokens_copy[i + 1]
                     t2 = tokens_copy[i + 2]
@@ -355,8 +345,7 @@ def construir_html(tokens_data, lt_data, original_text,
                             t1["processed"] = True
                             i += 2
                             continue
-            # Pretérito compuesto (haber + participio)
-            if st.session_state["show_preterito_compuesto"]:
+            if show_preterito_compuesto:
                 if tk["lemma"] == "haber" and "Pres" in tk["morph"] and (i + 1) < length:
                     t1 = tokens_copy[i + 1]
                     if "VerbForm=Part" in t1["morph"]:
@@ -389,7 +378,6 @@ def construir_html(tokens_data, lt_data, original_text,
                     global_index += 1
                     continue
                 if tk["start"] >= line_start_offset and tk["end"] <= line_end_offset:
-                    # Rimas parciales: resaltar solo el sufijo
                     if tk["suffix_to_highlight"]:
                         any_background = any("background-color" in s for s in tk["styles"])
                         if not any_background:
@@ -495,7 +483,6 @@ def admin_panel():
             with open(USERS_FILE, "w") as f:
                 json.dump(users, f)
             st.success(f"Usuario {new_email} creado con éxito.")
-            # Opcional: enviar correo de bienvenida
             send_email(
                 new_email, 
                 "Registro exitoso", 
@@ -509,30 +496,24 @@ def admin_panel():
 # --------------------------------------------------------------------
 def main():
     if not st.session_state["authenticated"]:
-        # Si no está autenticado, mostramos la forma de login
         login_form()
     else:
-        # Botón de logout arriba a la derecha
         st.sidebar.write(f"**Usuario:** {st.session_state['user_email']}")
         if st.sidebar.button("Cerrar sesión"):
             logout()
 
-        # Si es admin, puede mostrar/ocultar el panel de administración
         if st.session_state["is_admin"]:
             st.sidebar.write("---")
             if st.sidebar.checkbox("Mostrar Panel de Administración", value=False):
                 admin_panel()
 
-        # Opciones del análisis en la barra lateral
         show_analysis_options()
 
-        # --- FLUJO DE LA APP DE ANÁLISIS ---
         analysis_done = st.session_state.get("analysis_done", False)
         edit_mode = st.session_state.get("edit_mode", False)
         current_counts = st.session_state["marca_counts"]
 
         if not analysis_done:
-            # Leyenda (con conteos en cero si no hay análisis)
             st.markdown(build_legend_html(current_counts), unsafe_allow_html=True)
             st.markdown("### Pega aquí tu obra maestra")
             texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -558,10 +539,9 @@ def main():
                 st.session_state["analysis_done"] = True
                 st.session_state["edit_mode"] = False
                 st.session_state["marca_counts"] = marca_counts
-                st.rerun()
+                st.experimental_rerun()
 
         elif not edit_mode:
-            # Leyenda con conteos reales
             st.markdown(build_legend_html(st.session_state["marca_counts"]), unsafe_allow_html=True)
             st.markdown("### Texto analizado")
             html_result, marca_counts = construir_html(
@@ -585,7 +565,7 @@ def main():
             with colA:
                 if st.button("Editar"):
                     st.session_state["edit_mode"] = True
-                    st.rerun()
+                    st.experimental_rerun()
             with colB:
                 if st.button("Exportar a PDF"):
                     legend_block = build_legend_html(st.session_state["marca_counts"])
@@ -595,7 +575,6 @@ def main():
                         st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
         else:
-            # Leyenda con conteos antes de re-analizar
             st.markdown(build_legend_html(st.session_state["marca_counts"]), unsafe_allow_html=True)
             st.markdown("### Texto analizado (editable)")
             with st.form("editor_form"):
@@ -630,11 +609,11 @@ def main():
                 st.session_state["resultado_html"] = final_html
                 st.session_state["marca_counts"] = marca_counts
                 st.session_state["edit_mode"] = False
-                st.rerun()
+                st.experimental_rerun()
 
             elif return_btn:
                 st.session_state["edit_mode"] = False
-                st.rerun()
+                st.experimental_rerun()
 
             elif export_btn:
                 legend_block = build_legend_html(st.session_state["marca_counts"])
@@ -656,8 +635,5 @@ def main():
                 with open(pdf_path, "rb") as f:
                     st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
-# --------------------------------------------------------------------
-# EJECUTAMOS LA FUNCIÓN PRINCIPAL
-# --------------------------------------------------------------------
 if __name__ == "__main__":
     main()
