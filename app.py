@@ -13,7 +13,7 @@ from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
-# Carga el modelo spaCy en español (se asume que se instalará vía requirements.txt)
+# Carga el modelo spaCy en español
 # --------------------------------------------------------------------
 nlp = spacy.load("es_core_news_md")
 
@@ -84,8 +84,23 @@ st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pret
 st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
 st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
 
+# Generar y mostrar la leyenda en el sidebar solo si hay análisis
+if st.session_state.get("analysis_done", False):
+    leyenda_html = generar_leyenda(
+        st.session_state.get("marca_counts", {}),
+        st.session_state["show_adverbios"],
+        st.session_state["show_adjetivos"],
+        st.session_state["show_repeticiones_totales"],
+        st.session_state["show_rimas_parciales"],
+        st.session_state["show_dobles_verbos"],
+        st.session_state["show_preterito_compuesto"],
+        st.session_state["show_orthography"],
+        st.session_state["show_grammar"]
+    )
+    st.sidebar.markdown(leyenda_html, unsafe_allow_html=True)
+
 # --------------------------------------------------------------------
-# Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
+# Función para enviar email usando SendGrid
 # --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
@@ -385,9 +400,9 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
         legend_items.append(f"<li><span style='text-decoration: underline wavy yellow;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
     
     legend_html = f"""
-    <div style="margin-bottom:20px;">
+    <div style="margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
         <strong>Leyenda de Análisis:</strong>
-        <ul style="list-style-type: none; padding: 0;">
+        <ul style="list-style-type: none; padding: 0; margin: 0;">
             {''.join(legend_items)}
         </ul>
     </div>
@@ -430,20 +445,6 @@ if not analysis_done:
 
 # --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
 elif not edit_mode:
-    # Generar y mostrar la leyenda
-    leyenda_html = generar_leyenda(
-        st.session_state["marca_counts"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.markdown(leyenda_html, unsafe_allow_html=True)
-    
     st.markdown("### Texto analizado (no editable)")
     html_result, marca_counts = construir_html(
         st.session_state["tokens_data"],
@@ -499,20 +500,6 @@ elif not edit_mode:
 
 # --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
 else:
-    # Generar y mostrar la leyenda también en modo edición
-    leyenda_html = generar_leyenda(
-        st.session_state["marca_counts"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.markdown(leyenda_html, unsafe_allow_html=True)
-    
     st.markdown("### Texto analizado (editable)")
     with st.form("editor_form"):
         edited_html = st_quill(st.session_state["resultado_html"], key="editor_quill")
