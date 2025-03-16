@@ -14,13 +14,13 @@ from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
 # Función auxiliar para forzar un reinicio de la app.
-# Si st.experimental_rerun() no existe, se usa un hack con query_params y st.stop()
+# Se intenta usar st.experimental_rerun(); si falla, se usa st.query_params.
 # --------------------------------------------------------------------
 def my_rerun():
     try:
         st.experimental_rerun()
     except AttributeError:
-        st.experimental_set_query_params(rerun="1")
+        st.query_params(rerun="1")
         st.stop()
 
 # --------------------------------------------------------------------
