@@ -50,7 +50,6 @@ else:
 
 # Forzar la existencia del usuario administrador
 if "alesongs@gmail.com" not in users:
-    import bcrypt
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
         "nombre": "Administrador",
@@ -77,45 +76,63 @@ if "show_repeticiones_totales" not in st.session_state:
     st.session_state["show_repeticiones_totales"] = True
 if "show_rimas_parciales" not in st.session_state:
     st.session_state["show_rimas_parciales"] = True
-
-# Sidebar con las casillas para activar/desactivar funcionalidades
-st.sidebar.header("Opciones del análisis")
-
-st.session_state["show_adverbios"] = st.sidebar.checkbox(
-    "Mostrar adverbios", 
-    st.session_state.get("show_adverbios", True)
-)
-st.session_state["show_adjetivos"] = st.sidebar.checkbox(
-    "Mostrar adjetivos", 
-    st.session_state.get("show_adjetivos", True)
-)
-st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox(
-    "Mostrar repeticiones totales", 
-    st.session_state.get("show_repeticiones_totales", True)
-)
-st.session_state["show_rimas_parciales"] = st.sidebar.checkbox(
-    "Mostrar rimas parciales", 
-    st.session_state.get("show_rimas_parciales", True)
-)
-st.session_state["show_dobles_verbos"] = st.sidebar.checkbox(
-    "Mostrar dobles verbos", 
-    st.session_state.get("show_dobles_verbos", True)
-)
-st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox(
-    "Mostrar pretérito compuesto", 
-    st.session_state.get("show_preterito_compuesto", True)
-)
-st.session_state["show_orthography"] = st.sidebar.checkbox(
-    "Mostrar errores ortográficos", 
-    st.session_state.get("show_orthography", False)
-)
-st.session_state["show_grammar"] = st.sidebar.checkbox(
-    "Mostrar errores gramaticales", 
-    st.session_state.get("show_grammar", False)
-)
+if "analysis_done" not in st.session_state:
+    st.session_state["analysis_done"] = False
+if "edit_mode" not in st.session_state:
+    st.session_state["edit_mode"] = False
+if "marca_counts" not in st.session_state:
+    st.session_state["marca_counts"] = {
+        "adverbios": 0,
+        "adjetivos": 0,
+        "repeticiones_totales": 0,
+        "rimas_parciales": 0,
+        "dobles_verbos": 0,
+        "pretérito_compuesto": 0,
+        "ortografía": 0,
+        "gramática": 0
+    }
 
 # --------------------------------------------------------------------
-# Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
+# Sidebar con las casillas para activar/desactivar funcionalidades
+# (Solo se muestran si el usuario ya está logueado)
+# --------------------------------------------------------------------
+def show_analysis_options():
+    st.sidebar.header("Opciones del análisis")
+    st.session_state["show_adverbios"] = st.sidebar.checkbox(
+        "Mostrar adverbios", 
+        st.session_state.get("show_adverbios", True)
+    )
+    st.session_state["show_adjetivos"] = st.sidebar.checkbox(
+        "Mostrar adjetivos", 
+        st.session_state.get("show_adjetivos", True)
+    )
+    st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox(
+        "Mostrar repeticiones totales", 
+        st.session_state.get("show_repeticiones_totales", True)
+    )
+    st.session_state["show_rimas_parciales"] = st.sidebar.checkbox(
+        "Mostrar rimas parciales", 
+        st.session_state.get("show_rimas_parciales", True)
+    )
+    st.session_state["show_dobles_verbos"] = st.sidebar.checkbox(
+        "Mostrar dobles verbos", 
+        st.session_state.get("show_dobles_verbos", True)
+    )
+    st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox(
+        "Mostrar pretérito compuesto", 
+        st.session_state.get("show_preterito_compuesto", True)
+    )
+    st.session_state["show_orthography"] = st.sidebar.checkbox(
+        "Mostrar errores ortográficos", 
+        st.session_state.get("show_orthography", False)
+    )
+    st.session_state["show_grammar"] = st.sidebar.checkbox(
+        "Mostrar errores gramaticales", 
+        st.session_state.get("show_grammar", False)
+    )
+
+# --------------------------------------------------------------------
+# Función para enviar email usando SendGrid (usando secrets en la nube)
 # --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
@@ -136,7 +153,7 @@ def send_email(to_email, subject, body):
         st.error(f"Error al enviar email: {e}")
 
 # --------------------------------------------------------------------
-# Funciones para el análisis del texto
+# Funciones para el análisis del texto (las mismas que antes)
 # --------------------------------------------------------------------
 def correct_pos(token_text, spaCy_pos):
     lowered = token_text.lower()
@@ -222,9 +239,6 @@ def contar_marcas(tokens_copy):
             counts["gramática"] += 1
     return counts
 
-# --------------------------------------------------------------------
-# Construcción de la leyenda con conteo y borde punteado
-# --------------------------------------------------------------------
 def build_legend_html(counts):
     return f"""
     <div style="padding: 10px; margin-bottom: 15px; 
@@ -302,9 +316,9 @@ def construir_html(tokens_data, lt_data, original_text,
                     suffix = common_suffix(tk["text"], other["text"], 3)
                     if suffix and len(suffix) > len(best_suffix):
                         best_suffix = suffix
-            if show_repeticiones_totales and entire_similar:
+            if st.session_state["show_repeticiones_totales"] and entire_similar:
                 tk["styles"].add("background-color: #FFA500; color: black; text-decoration: underline;")
-            if show_rimas_parciales and not entire_similar and best_suffix:
+            if st.session_state["show_rimas_parciales"] and not entire_similar and best_suffix:
                 tk["suffix_to_highlight"] = best_suffix
 
     # Adverbios, adjetivos, dobles verbos, pretérito perfecto
@@ -313,13 +327,13 @@ def construir_html(tokens_data, lt_data, original_text,
         tk = tokens_copy[i]
         if not tk["processed"]:
             # Adverbios en -mente
-            if show_adverbios and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
+            if st.session_state["show_adverbios"] and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
                 tk["styles"].add("color: #7CFC00; text-decoration: underline;")
             # Adjetivos
-            if show_adjetivos and tk["pos"] == "ADJ":
+            if st.session_state["show_adjetivos"] and tk["pos"] == "ADJ":
                 tk["styles"].add("background-color: #FF69B4; color: black; text-decoration: underline;")
             # Dobles verbos
-            if show_dobles_verbos:
+            if st.session_state["show_dobles_verbos"]:
                 if tk["lemma"] in ["empezar", "comenzar", "tratar"] and (i + 2) < length:
                     t1 = tokens_copy[i + 1]
                     t2 = tokens_copy[i + 2]
@@ -342,7 +356,7 @@ def construir_html(tokens_data, lt_data, original_text,
                             i += 2
                             continue
             # Pretérito compuesto (haber + participio)
-            if show_preterito_compuesto:
+            if st.session_state["show_preterito_compuesto"]:
                 if tk["lemma"] == "haber" and "Pres" in tk["morph"] and (i + 1) < length:
                     t1 = tokens_copy[i + 1]
                     if "VerbForm=Part" in t1["morph"]:
@@ -354,7 +368,6 @@ def construir_html(tokens_data, lt_data, original_text,
                         continue
         i += 1
 
-    # Reconstrucción en HTML
     paragraphs = original_text.split("\n\n")
     total_tokens = len(tokens_copy)
     global_index = 0
@@ -395,7 +408,6 @@ def construir_html(tokens_data, lt_data, original_text,
                                 )
                                 global_index += 1
                                 continue
-                    # Si hay estilos, aplicarlos
                     if tk["styles"]:
                         style_str = " ".join(tk["styles"])
                         line_html += f'<span style="{style_str}">{tk["text"]}</span>' + tk["ws"]
@@ -436,150 +448,216 @@ def clean_text(html_text):
     return soup.get_text(separator="\n")
 
 # --------------------------------------------------------------------
+# LÓGICA DE LOGIN / ADMIN
+# --------------------------------------------------------------------
+def login_form():
+    st.subheader("Inicia sesión")
+    email = st.text_input("Email")
+    password = st.text_input("Contraseña", type="password")
+    if st.button("Iniciar sesión"):
+        if email in users:
+            hashed_password = users[email]["password"]
+            if bcrypt.checkpw(password.encode(), hashed_password.encode()):
+                st.session_state["authenticated"] = True
+                st.session_state["user_email"] = email
+                st.session_state["nombre"] = users[email]["nombre"]
+                st.session_state["is_admin"] = (email == "alesongs@gmail.com")
+                st.success("Has iniciado sesión correctamente.")
+                st.experimental_rerun()
+            else:
+                st.error("Contraseña incorrecta.")
+        else:
+            st.error("Usuario no encontrado.")
+
+def logout():
+    st.session_state["authenticated"] = False
+    st.session_state["user_email"] = ""
+    st.session_state["nombre"] = ""
+    st.session_state["is_admin"] = False
+    st.session_state["analysis_done"] = False
+    st.session_state["edit_mode"] = False
+    st.experimental_rerun()
+
+def admin_panel():
+    st.subheader("Panel de Administración")
+    st.info("Aquí puedes crear nuevos usuarios.")
+    new_name = st.text_input("Nombre del nuevo usuario")
+    new_email = st.text_input("Email del nuevo usuario")
+    new_password = st.text_input("Contraseña del nuevo usuario", type="password")
+    if st.button("Registrar nuevo usuario"):
+        if new_email not in users:
+            hashed_pw = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+            users[new_email] = {
+                "nombre": new_name,
+                "email": new_email,
+                "password": hashed_pw
+            }
+            with open(USERS_FILE, "w") as f:
+                json.dump(users, f)
+            st.success(f"Usuario {new_email} creado con éxito.")
+            # Opcional: enviar correo de bienvenida
+            send_email(
+                new_email, 
+                "Registro exitoso", 
+                f"¡Hola {new_name}!\nHas sido registrado en la plataforma Edita sobrio."
+            )
+        else:
+            st.error("Ese email ya está registrado.")
+
+# --------------------------------------------------------------------
 # Lógica principal de la app
 # --------------------------------------------------------------------
-analysis_done = st.session_state.get("analysis_done", False)
-edit_mode = st.session_state.get("edit_mode", False)
+def main():
+    if not st.session_state["authenticated"]:
+        # Si no está autenticado, mostramos la forma de login
+        login_form()
+    else:
+        # Botón de logout arriba a la derecha
+        st.sidebar.write(f"**Usuario:** {st.session_state['user_email']}")
+        if st.sidebar.button("Cerrar sesión"):
+            logout()
 
-# Obtenemos los conteos actuales (si no existen, los dejamos en 0)
-current_counts = st.session_state.get("marca_counts", {
-    "adverbios": 0,
-    "adjetivos": 0,
-    "repeticiones_totales": 0,
-    "rimas_parciales": 0,
-    "dobles_verbos": 0,
-    "pretérito_compuesto": 0,
-    "ortografía": 0,
-    "gramática": 0
-})
+        # Si es admin, puede mostrar/ocultar el panel de administración
+        if st.session_state["is_admin"]:
+            st.sidebar.write("---")
+            if st.sidebar.checkbox("Mostrar Panel de Administración", value=False):
+                admin_panel()
 
-# --- MODO INICIAL: Área para pegar el texto a analizar ---
-if not analysis_done:
-    # Leyenda (con conteos en cero, pues no hay análisis todavía)
-    st.markdown(build_legend_html(current_counts), unsafe_allow_html=True)
-    st.markdown("### Pega aquí tu obra maestra")
-    texto_inicial = st.text_area("", height=300, label_visibility="hidden")
-    if st.button("Analizar"):
-        tokens_data, lt_data, original_text = analizar_texto(texto_inicial)
-        final_html, marca_counts = construir_html(
-            tokens_data,
-            lt_data,
-            original_text,
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
-        )
-        st.session_state["tokens_data"] = tokens_data
-        st.session_state["lt_data"] = lt_data
-        st.session_state["original_text"] = original_text
-        st.session_state["resultado_html"] = final_html
-        st.session_state["analysis_done"] = True
-        st.session_state["edit_mode"] = False
-        st.session_state["marca_counts"] = marca_counts
-        st.rerun()
+        # Opciones del análisis en la barra lateral
+        show_analysis_options()
 
-# --- MODO LECTURA: Mostrar el texto analizado ---
-elif not edit_mode:
-    # Leyenda con conteos reales
-    st.markdown(build_legend_html(st.session_state["marca_counts"]), unsafe_allow_html=True)
-    st.markdown("### Texto analizado")
-    html_result, marca_counts = construir_html(
-        st.session_state["tokens_data"],
-        st.session_state["lt_data"],
-        st.session_state["original_text"],
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.session_state["resultado_html"] = html_result
-    st.session_state["marca_counts"] = marca_counts
+        # --- FLUJO DE LA APP DE ANÁLISIS ---
+        analysis_done = st.session_state.get("analysis_done", False)
+        edit_mode = st.session_state.get("edit_mode", False)
+        current_counts = st.session_state["marca_counts"]
 
-    st.markdown(html_result, unsafe_allow_html=True)
+        if not analysis_done:
+            # Leyenda (con conteos en cero si no hay análisis)
+            st.markdown(build_legend_html(current_counts), unsafe_allow_html=True)
+            st.markdown("### Pega aquí tu obra maestra")
+            texto_inicial = st.text_area("", height=300, label_visibility="hidden")
+            if st.button("Analizar"):
+                tokens_data, lt_data, original_text = analizar_texto(texto_inicial)
+                final_html, marca_counts = construir_html(
+                    tokens_data,
+                    lt_data,
+                    original_text,
+                    st.session_state["show_adverbios"],
+                    st.session_state["show_adjetivos"],
+                    st.session_state["show_repeticiones_totales"],
+                    st.session_state["show_rimas_parciales"],
+                    st.session_state["show_dobles_verbos"],
+                    st.session_state["show_preterito_compuesto"],
+                    st.session_state["show_orthography"],
+                    st.session_state["show_grammar"]
+                )
+                st.session_state["tokens_data"] = tokens_data
+                st.session_state["lt_data"] = lt_data
+                st.session_state["original_text"] = original_text
+                st.session_state["resultado_html"] = final_html
+                st.session_state["analysis_done"] = True
+                st.session_state["edit_mode"] = False
+                st.session_state["marca_counts"] = marca_counts
+                st.rerun()
 
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("Editar"):
-            st.session_state["edit_mode"] = True
-            st.rerun()
-    with colB:
-        if st.button("Exportar a PDF"):
-            # Usamos la misma leyenda que en pantalla
-            legend_block = build_legend_html(st.session_state["marca_counts"])
-            pdf_html = f"<html><body style='font-family: Arial;'>{legend_block}{html_result}</body></html>"
-            pdf_path = exportar_a_pdf(pdf_html)
-            with open(pdf_path, "rb") as f:
-                st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+        elif not edit_mode:
+            # Leyenda con conteos reales
+            st.markdown(build_legend_html(st.session_state["marca_counts"]), unsafe_allow_html=True)
+            st.markdown("### Texto analizado")
+            html_result, marca_counts = construir_html(
+                st.session_state["tokens_data"],
+                st.session_state["lt_data"],
+                st.session_state["original_text"],
+                st.session_state["show_adverbios"],
+                st.session_state["show_adjetivos"],
+                st.session_state["show_repeticiones_totales"],
+                st.session_state["show_rimas_parciales"],
+                st.session_state["show_dobles_verbos"],
+                st.session_state["show_preterito_compuesto"],
+                st.session_state["show_orthography"],
+                st.session_state["show_grammar"]
+            )
+            st.session_state["resultado_html"] = html_result
+            st.session_state["marca_counts"] = marca_counts
+            st.markdown(html_result, unsafe_allow_html=True)
 
-# --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
-else:
-    # Leyenda con conteos antes de re-analizar
-    st.markdown(build_legend_html(st.session_state["marca_counts"]), unsafe_allow_html=True)
-    st.markdown("### Texto analizado (editable)")
-    with st.form("editor_form"):
-        edited_html = st_quill(st.session_state["resultado_html"], key="editor_quill")
-        reanalyze_btn = st.form_submit_button("Re-Analizar texto editado")
-        return_btn = st.form_submit_button("Volver a lectura")
-        export_btn = st.form_submit_button("Exportar a PDF")
+            colA, colB = st.columns(2)
+            with colA:
+                if st.button("Editar"):
+                    st.session_state["edit_mode"] = True
+                    st.rerun()
+            with colB:
+                if st.button("Exportar a PDF"):
+                    legend_block = build_legend_html(st.session_state["marca_counts"])
+                    pdf_html = f"<html><body style='font-family: Arial;'>{legend_block}{html_result}</body></html>"
+                    pdf_path = exportar_a_pdf(pdf_html)
+                    with open(pdf_path, "rb") as f:
+                        st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
-    if reanalyze_btn:
-        plain_text = clean_text(edited_html)
-        st.session_state["tokens_data"] = None
-        st.session_state["lt_data"] = []
-        st.session_state["original_text"] = ""
-        st.session_state["resultado_html"] = ""
-        tokens_data, lt_data, original_text = analizar_texto(plain_text)
-        final_html, marca_counts = construir_html(
-            tokens_data,
-            lt_data,
-            original_text,
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
-        )
-        st.session_state["tokens_data"] = tokens_data
-        st.session_state["lt_data"] = lt_data
-        st.session_state["original_text"] = original_text
-        st.session_state["resultado_html"] = final_html
-        st.session_state["marca_counts"] = marca_counts
-        st.session_state["edit_mode"] = False
-        st.rerun()
+        else:
+            # Leyenda con conteos antes de re-analizar
+            st.markdown(build_legend_html(st.session_state["marca_counts"]), unsafe_allow_html=True)
+            st.markdown("### Texto analizado (editable)")
+            with st.form("editor_form"):
+                edited_html = st_quill(st.session_state["resultado_html"], key="editor_quill")
+                reanalyze_btn = st.form_submit_button("Re-Analizar texto editado")
+                return_btn = st.form_submit_button("Volver a lectura")
+                export_btn = st.form_submit_button("Exportar a PDF")
 
-    elif return_btn:
-        st.session_state["edit_mode"] = False
-        st.rerun()
+            if reanalyze_btn:
+                plain_text = clean_text(edited_html)
+                st.session_state["tokens_data"] = None
+                st.session_state["lt_data"] = []
+                st.session_state["original_text"] = ""
+                st.session_state["resultado_html"] = ""
+                tokens_data, lt_data, original_text = analizar_texto(plain_text)
+                final_html, marca_counts = construir_html(
+                    tokens_data,
+                    lt_data,
+                    original_text,
+                    st.session_state["show_adverbios"],
+                    st.session_state["show_adjetivos"],
+                    st.session_state["show_repeticiones_totales"],
+                    st.session_state["show_rimas_parciales"],
+                    st.session_state["show_dobles_verbos"],
+                    st.session_state["show_preterito_compuesto"],
+                    st.session_state["show_orthography"],
+                    st.session_state["show_grammar"]
+                )
+                st.session_state["tokens_data"] = tokens_data
+                st.session_state["lt_data"] = lt_data
+                st.session_state["original_text"] = original_text
+                st.session_state["resultado_html"] = final_html
+                st.session_state["marca_counts"] = marca_counts
+                st.session_state["edit_mode"] = False
+                st.rerun()
 
-    elif export_btn:
-        # Reutilizamos la misma leyenda con conteos
-        legend_block = build_legend_html(st.session_state["marca_counts"])
-        html_result, marca_counts = construir_html(
-            st.session_state["tokens_data"],
-            st.session_state["lt_data"],
-            st.session_state["original_text"],
-            st.session_state["show_adverbios"],
-            st.session_state["show_adjetivos"],
-            st.session_state["show_repeticiones_totales"],
-            st.session_state["show_rimas_parciales"],
-            st.session_state["show_dobles_verbos"],
-            st.session_state["show_preterito_compuesto"],
-            st.session_state["show_orthography"],
-            st.session_state["show_grammar"]
-        )
-        pdf_html = f"<html><body style='font-family: Arial;'>{legend_block}{html_result}</body></html>"
-        pdf_path = exportar_a_pdf(pdf_html)
-        with open(pdf_path, "rb") as f:
-            st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+            elif return_btn:
+                st.session_state["edit_mode"] = False
+                st.rerun()
+
+            elif export_btn:
+                legend_block = build_legend_html(st.session_state["marca_counts"])
+                html_result, marca_counts = construir_html(
+                    st.session_state["tokens_data"],
+                    st.session_state["lt_data"],
+                    st.session_state["original_text"],
+                    st.session_state["show_adverbios"],
+                    st.session_state["show_adjetivos"],
+                    st.session_state["show_repeticiones_totales"],
+                    st.session_state["show_rimas_parciales"],
+                    st.session_state["show_dobles_verbos"],
+                    st.session_state["show_preterito_compuesto"],
+                    st.session_state["show_orthography"],
+                    st.session_state["show_grammar"]
+                )
+                pdf_html = f"<html><body style='font-family: Arial;'>{legend_block}{html_result}</body></html>"
+                pdf_path = exportar_a_pdf(pdf_html)
+                with open(pdf_path, "rb") as f:
+                    st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+
+# --------------------------------------------------------------------
+# EJECUTAMOS LA FUNCIÓN PRINCIPAL
+# --------------------------------------------------------------------
+if __name__ == "__main__":
+    main()
