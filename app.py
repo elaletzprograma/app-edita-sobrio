@@ -13,6 +13,29 @@ from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
+# Forzar light mode: se evita que la app use dark mode, mejorando el contraste
+# --------------------------------------------------------------------
+st.markdown(
+    """
+    <style>
+    :root {
+        color-scheme: light;
+    }
+    body {
+        background-color: white !important;
+        color: black !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# --------------------------------------------------------------------
+# Título de la app (aparece en todos los modos)
+# --------------------------------------------------------------------
+st.header("Edita sobrio")
+
+# --------------------------------------------------------------------
 # Función para mostrar la leyenda de colores
 # --------------------------------------------------------------------
 def display_legend():
@@ -39,8 +62,6 @@ nlp = spacy.load("es_core_news_md")
 # --------------------------------------------------------------------
 # Inicializa LanguageTool para español
 # --------------------------------------------------------------------
-import language_tool_python
-
 class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
     def _query_server(self, url, params=None, **kwargs):
         import requests
@@ -416,11 +437,11 @@ if not analysis_done:
         st.session_state["marca_counts"] = marca_counts
         st.rerun()
 
-# --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
+# --- MODO LECTURA: Mostrar el texto analizado ---
 elif not edit_mode:
-    # Mostrar la leyenda de colores arriba del título
+    # Mostrar leyenda de colores arriba del título
     display_legend()
-    st.markdown("### Texto analizado (no editable)")
+    st.markdown("### Texto analizado")
     html_result, marca_counts = construir_html(
         st.session_state["tokens_data"],
         st.session_state["lt_data"],
@@ -475,7 +496,7 @@ elif not edit_mode:
 
 # --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
 else:
-    # Mostrar la leyenda de colores arriba del editor
+    # Mostrar leyenda de colores arriba del editor
     display_legend()
     st.markdown("### Texto analizado (editable)")
     with st.form("editor_form"):
