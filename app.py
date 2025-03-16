@@ -13,13 +13,34 @@ from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
-# Carga el modelo spaCy en español
+# Función para mostrar la leyenda de colores
+# --------------------------------------------------------------------
+def display_legend():
+    legend_html = """
+    <div style="padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px;">
+      <strong>Leyenda de Colores:</strong><br>
+      <span style="color: green; text-decoration: underline;">Adverbios en -mente</span> &nbsp;&nbsp;
+      <span style="background-color: pink; text-decoration: underline;">Adjetivos</span> &nbsp;&nbsp;
+      <span style="background-color: orange; text-decoration: underline;">Repeticiones Totales</span> &nbsp;&nbsp;
+      <span style="background-color: #ffcc80; text-decoration: underline;">Rimas Parciales</span> &nbsp;&nbsp;
+      <span style="background-color: #dab4ff; text-decoration: underline;">Dobles Verbos</span> &nbsp;&nbsp;
+      <span style="background-color: lightblue; text-decoration: underline;">Pretérito Perfecto Compuesto</span> &nbsp;&nbsp;
+      <span style="text-decoration: underline wavy red;">Ortografía</span> &nbsp;&nbsp;
+      <span style="text-decoration: underline wavy yellow;">Gramática</span>
+    </div>
+    """
+    st.markdown(legend_html, unsafe_allow_html=True)
+
+# --------------------------------------------------------------------
+# Carga el modelo spaCy en español (se asume que se instalará vía requirements.txt)
 # --------------------------------------------------------------------
 nlp = spacy.load("es_core_news_md")
 
 # --------------------------------------------------------------------
 # Inicializa LanguageTool para español
 # --------------------------------------------------------------------
+import language_tool_python
+
 class LanguageToolPost(language_tool_python.LanguageToolPublicAPI):
     def _query_server(self, url, params=None, **kwargs):
         import requests
@@ -84,23 +105,8 @@ st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pret
 st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
 st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
 
-# Generar y mostrar la leyenda en el sidebar solo si hay análisis
-if st.session_state.get("analysis_done", False):
-    leyenda_html = generar_leyenda(
-        st.session_state.get("marca_counts", {}),
-        st.session_state["show_adverbios"],
-        st.session_state["show_adjetivos"],
-        st.session_state["show_repeticiones_totales"],
-        st.session_state["show_rimas_parciales"],
-        st.session_state["show_dobles_verbos"],
-        st.session_state["show_preterito_compuesto"],
-        st.session_state["show_orthography"],
-        st.session_state["show_grammar"]
-    )
-    st.sidebar.markdown(leyenda_html, unsafe_allow_html=True)
-
 # --------------------------------------------------------------------
-# Función para enviar email usando SendGrid
+# Función para enviar email usando SendGrid (se utilizarán los secrets configurados en Streamlit Cloud)
 # --------------------------------------------------------------------
 def send_email(to_email, subject, body):
     try:
@@ -377,39 +383,6 @@ def clean_text(html_text):
     return soup.get_text(separator="\n")
 
 # --------------------------------------------------------------------
-# Función para generar la leyenda de colores
-# --------------------------------------------------------------------
-def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticiones_totales, show_rimas_parciales,
-                    show_dobles_verbos, show_preterito_compuesto, show_orthography, show_grammar):
-    legend_items = []
-    if show_adverbios:
-        legend_items.append(f"<li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({marca_counts.get('adverbios', 0)})</span></li>")
-    if show_adjetivos:
-        legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
-    if show_repeticiones_totales:
-        legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
-    if show_rimas_parciales:
-        legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
-    if show_dobles_verbos:
-        legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
-    if show_preterito_compuesto:
-        legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
-    if show_orthography:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy red;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
-    if show_grammar:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy yellow;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
-    
-    legend_html = f"""
-    <div style="margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
-        <strong>Leyenda de Análisis:</strong>
-        <ul style="list-style-type: none; padding: 0; margin: 0;">
-            {''.join(legend_items)}
-        </ul>
-    </div>
-    """
-    return legend_html
-
-# --------------------------------------------------------------------
 # Lógica principal de la app
 # --------------------------------------------------------------------
 analysis_done = st.session_state.get("analysis_done", False)
@@ -445,6 +418,8 @@ if not analysis_done:
 
 # --- MODO LECTURA: Mostrar el texto analizado (no editable) ---
 elif not edit_mode:
+    # Mostrar la leyenda de colores arriba del título
+    display_legend()
     st.markdown("### Texto analizado (no editable)")
     html_result, marca_counts = construir_html(
         st.session_state["tokens_data"],
@@ -500,6 +475,8 @@ elif not edit_mode:
 
 # --- MODO EDICIÓN: Mostrar el texto analizado en un editor ---
 else:
+    # Mostrar la leyenda de colores arriba del editor
+    display_legend()
     st.markdown("### Texto analizado (editable)")
     with st.form("editor_form"):
         edited_html = st_quill(st.session_state["resultado_html"], key="editor_quill")
