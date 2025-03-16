@@ -149,13 +149,19 @@ def analizar_texto(texto):
     lt_data = []
     if tool is not None:
         try:
-            lt_matches = tool.check(texto)
-            for match in lt_matches:
-                lt_data.append({
-                    "start": match.offset,
-                    "end": match.offset + match.errorLength,
-                    "category": match.category
-                })
+            # Dividir el texto en bloques de 1000 caracteres
+            max_length = 1000
+            text_blocks = [texto[i:i+max_length] for i in range(0, len(texto), max_length)]
+            offset = 0
+            for block in text_blocks:
+                lt_matches = tool.check(block)
+                for match in lt_matches:
+                    lt_data.append({
+                        "start": match.offset + offset,
+                        "end": match.offset + match.errorLength + offset,
+                        "category": match.category
+                    })
+                offset += len(block)
         except language_tool_python.utils.LanguageToolError as e:
             st.warning(f"No se pudo realizar la corrección gramatical: {e}")
     else:
@@ -364,30 +370,30 @@ def clean_text(html_text):
     return soup.get_text(separator="\n")
 
 # --------------------------------------------------------------------
-# Función para generar la leyenda de colores
+# Función para generar la leyenda de colores con mejor contraste
 # --------------------------------------------------------------------
 def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticiones_totales, show_rimas_parciales,
                     show_dobles_verbos, show_preterito_compuesto, show_orthography, show_grammar):
     legend_items = []
     if show_adverbios:
-        legend_items.append(f"<li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({marca_counts.get('adverbios', 0)})</span></li>")
+        legend_items.append(f"<li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({marca_counts.get('adverbios', 0)})</span></li>")
     if show_adjetivos:
-        legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline; color: black;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
     if show_repeticiones_totales:
-        legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline; color: black;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
     if show_rimas_parciales:
-        legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline; color: black;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
     if show_dobles_verbos:
-        legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline; color: black;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
     if show_preterito_compuesto:
-        legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline; color: black;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
+        legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
     if show_orthography:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy red;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
+        legend_items.append(f"<li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
     if show_grammar:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy yellow;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
+        legend_items.append(f"<li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
     
     legend_html = f"""
-    <div style="margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
+    <div style="margin-top: 20px; padding: 10px; background-color: #e0e0e0; border-radius: 5px; border: 1px solid #ccc;">
         <strong>Leyenda de Análisis:</strong>
         <ul style="list-style-type: none; padding: 0; margin: 0;">
             {''.join(legend_items)}
@@ -416,6 +422,12 @@ if not st.session_state["authenticated"]:
         else:
             st.error("Email o contraseña incorrectos")
 else:
+    # Botón adicional para administradores en la interfaz principal
+    if st.session_state["is_admin"] and not st.session_state["show_admin_panel"]:
+        if st.button("Ir al Panel de Administración"):
+            st.session_state["show_admin_panel"] = True
+            st.rerun()
+
     # Sidebar para usuarios autenticados
     if st.session_state["is_admin"]:
         st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']} (Admin)")
@@ -540,14 +552,14 @@ else:
                     <div style="margin-bottom:20px;">
                         <strong>Funcionalidades y Colores:</strong>
                         <ul style="list-style-type: none; padding: 0;">
-                            <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                            <li><span style='background-color: pink; text-decoration: underline; color: black;'>Adjetivos ({adjetivos_count})</span></li>
-                            <li><span style='background-color: orange; text-decoration: underline; color: black;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                            <li><span style='background-color: #ffcc80; text-decoration: underline; color: black;'>Rimas Parciales ({rimas_count})</span></li>
-                            <li><span style='background-color: #dab4ff; text-decoration: underline; color: black;'>Dobles Verbos ({dobles_count})</span></li>
-                            <li><span style='background-color: lightblue; text-decoration: underline; color: black;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                            <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
-                            <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
+                            <li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({adverbios_count})</span></li>
+                            <li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({adjetivos_count})</span></li>
+                            <li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                            <li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({rimas_count})</span></li>
+                            <li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({dobles_count})</span></li>
+                            <li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                            <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({ortografia_count})</span></li>
+                            <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({gramatica_count})</span></li>
                         </ul>
                     </div>
                     """
@@ -618,14 +630,14 @@ else:
                 <div style="margin-bottom:20px;">
                     <strong>Funcionalidades y Colores:</strong>
                     <ul style="list-style-type: none; padding: 0;">
-                        <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                        <li><span style='background-color: pink; text-decoration: underline; color: black;'>Adjetivos ({adjetivos_count})</span></li>
-                        <li><span style='background-color: orange; text-decoration: underline; color: black;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                        <li><span style='background-color: #ffcc80; text-decoration: underline; color: black;'>Rimas Parciales ({rimas_count})</span></li>
-                        <li><span style='background-color: #dab4ff; text-decoration: underline; color: black;'>Dobles Verbos ({dobles_count})</span></li>
-                        <li><span style='background-color: lightblue; text-decoration: underline; color: black;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                        <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
-                        <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
+                        <li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({adverbios_count})</span></li>
+                        <li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({adjetivos_count})</span></li>
+                        <li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                        <li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({rimas_count})</span></li>
+                        <li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({dobles_count})</span></li>
+                        <li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                        <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({ortografia_count})</span></li>
+                        <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({gramatica_count})</span></li>
                     </ul>
                 </div>
                 """
