@@ -13,6 +13,17 @@ from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
+# Función auxiliar para forzar un reinicio de la app.
+# Usa st.experimental_rerun() o, si no está disponible, la API interna.
+# --------------------------------------------------------------------
+def my_rerun():
+    try:
+        st.experimental_rerun()
+    except AttributeError:
+        from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
+        get_script_run_ctx().request_rerun()
+
+# --------------------------------------------------------------------
 # Título de la app (aparece en todos los modos)
 # --------------------------------------------------------------------
 st.header("Edita sobrio")
@@ -451,7 +462,7 @@ def login_form():
                 st.session_state["nombre"] = users[email]["nombre"]
                 st.session_state["is_admin"] = (email == "alesongs@gmail.com")
                 st.success("Has iniciado sesión correctamente.")
-                st.experimental_rerun()
+                my_rerun()
             else:
                 st.error("Contraseña incorrecta.")
         else:
@@ -464,7 +475,7 @@ def logout():
     st.session_state["is_admin"] = False
     st.session_state["analysis_done"] = False
     st.session_state["edit_mode"] = False
-    st.experimental_rerun()
+    my_rerun()
 
 def admin_panel():
     st.subheader("Panel de Administración")
@@ -539,7 +550,7 @@ def main():
                 st.session_state["analysis_done"] = True
                 st.session_state["edit_mode"] = False
                 st.session_state["marca_counts"] = marca_counts
-                st.experimental_rerun()
+                my_rerun()
 
         elif not edit_mode:
             st.markdown(build_legend_html(st.session_state["marca_counts"]), unsafe_allow_html=True)
@@ -565,7 +576,7 @@ def main():
             with colA:
                 if st.button("Editar"):
                     st.session_state["edit_mode"] = True
-                    st.experimental_rerun()
+                    my_rerun()
             with colB:
                 if st.button("Exportar a PDF"):
                     legend_block = build_legend_html(st.session_state["marca_counts"])
@@ -609,11 +620,11 @@ def main():
                 st.session_state["resultado_html"] = final_html
                 st.session_state["marca_counts"] = marca_counts
                 st.session_state["edit_mode"] = False
-                st.experimental_rerun()
+                my_rerun()
 
             elif return_btn:
                 st.session_state["edit_mode"] = False
-                st.experimental_rerun()
+                my_rerun()
 
             elif export_btn:
                 legend_block = build_legend_html(st.session_state["marca_counts"])
