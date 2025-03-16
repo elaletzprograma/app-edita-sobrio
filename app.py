@@ -13,24 +13,6 @@ from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------
-# Forzar light mode: se evita que la app use dark mode, mejorando el contraste
-# --------------------------------------------------------------------
-st.markdown(
-    """
-    <style>
-    :root {
-        color-scheme: light;
-    }
-    body {
-        background-color: white !important;
-        color: black !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# --------------------------------------------------------------------
 # Título de la app (aparece en todos los modos)
 # --------------------------------------------------------------------
 st.header("Edita sobrio")
@@ -42,14 +24,14 @@ def display_legend():
     legend_html = """
     <div style="padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px;">
       <strong>Leyenda de Colores:</strong><br>
-      <span style="color: green; text-decoration: underline;">Adverbios en -mente</span> &nbsp;&nbsp;
-      <span style="background-color: pink; text-decoration: underline;">Adjetivos</span> &nbsp;&nbsp;
-      <span style="background-color: orange; text-decoration: underline;">Repeticiones Totales</span> &nbsp;&nbsp;
-      <span style="background-color: #ffcc80; text-decoration: underline;">Rimas Parciales</span> &nbsp;&nbsp;
-      <span style="background-color: #dab4ff; text-decoration: underline;">Dobles Verbos</span> &nbsp;&nbsp;
-      <span style="background-color: lightblue; text-decoration: underline;">Pretérito Perfecto Compuesto</span> &nbsp;&nbsp;
-      <span style="text-decoration: underline wavy red;">Ortografía</span> &nbsp;&nbsp;
-      <span style="text-decoration: underline wavy yellow;">Gramática</span>
+      <span style="color: #7CFC00; text-decoration: underline;">Adverbios en -mente</span> &nbsp;&nbsp;
+      <span style="background-color: #FF69B4; color: black; text-decoration: underline;">Adjetivos</span> &nbsp;&nbsp;
+      <span style="background-color: #FFA500; color: black; text-decoration: underline;">Repeticiones Totales</span> &nbsp;&nbsp;
+      <span style="background-color: #FF6347; color: black; text-decoration: underline;">Rimas Parciales</span> &nbsp;&nbsp;
+      <span style="background-color: #9370DB; color: black; text-decoration: underline;">Dobles Verbos</span> &nbsp;&nbsp;
+      <span style="background-color: #00CED1; color: black; text-decoration: underline;">Pretérito Perfecto Compuesto</span> &nbsp;&nbsp;
+      <span style="text-decoration: underline wavy #FF4500;">Ortografía</span> &nbsp;&nbsp;
+      <span style="text-decoration: underline wavy #FFD700;">Gramática</span>
     </div>
     """
     st.markdown(legend_html, unsafe_allow_html=True)
@@ -216,21 +198,22 @@ def contar_marcas(tokens_copy):
     }
     for token in tokens_copy:
         styles_str = " ".join(token.get("styles", []))
-        if "color: green" in styles_str:
+        # Ajustamos la detección para coincidir con los nuevos colores:
+        if "color: #7CFC00" in styles_str:
             counts["adverbios"] += 1
-        if "background-color: pink" in styles_str:
+        if "background-color: #FF69B4" in styles_str:
             counts["adjetivos"] += 1
-        if "background-color: orange" in styles_str:
+        if "background-color: #FFA500" in styles_str:
             counts["repeticiones_totales"] += 1
-        if token.get("suffix_to_highlight", ""):
+        if "background-color: #FF6347" in styles_str:
             counts["rimas_parciales"] += 1
-        if "background-color: #dab4ff" in styles_str:
+        if "background-color: #9370DB" in styles_str:
             counts["dobles_verbos"] += 1
-        if "background-color: lightblue" in styles_str:
+        if "background-color: #00CED1" in styles_str:
             counts["pretérito_compuesto"] += 1
-        if "underline wavy red" in styles_str:
+        if "underline wavy #FF4500" in styles_str:
             counts["ortografía"] += 1
-        if "underline wavy yellow" in styles_str:
+        if "underline wavy #FFD700" in styles_str:
             counts["gramática"] += 1
     return counts
 
@@ -247,6 +230,7 @@ def construir_html(tokens_data, lt_data, original_text,
         tokens_copy.append(tcopy)
     length = len(tokens_copy)
 
+    # Ortografía y gramática
     if show_orthography or show_grammar:
         for ltmatch in lt_data:
             start_m = ltmatch["start"]
@@ -255,10 +239,11 @@ def construir_html(tokens_data, lt_data, original_text,
             for tk in tokens_copy:
                 if tk["start"] >= start_m and tk["end"] <= end_m:
                     if show_orthography and cat in ("TYPOS", "MISSPELLING", "SPELLING"):
-                        tk["styles"].add("text-decoration: underline wavy red;")
+                        tk["styles"].add("text-decoration: underline wavy #FF4500;")
                     if show_grammar and cat == "GRAMMAR":
-                        tk["styles"].add("text-decoration: underline wavy yellow;")
+                        tk["styles"].add("text-decoration: underline wavy #FFD700;")
 
+    # Repeticiones y rimas
     for i, tk in enumerate(tokens_copy):
         if tk["pos"] in {"NOUN", "ADJ", "VERB"}:
             start_w = max(0, i - 45)
@@ -278,25 +263,29 @@ def construir_html(tokens_data, lt_data, original_text,
                     if suffix and len(suffix) > len(best_suffix):
                         best_suffix = suffix
             if show_repeticiones_totales and entire_similar:
-                tk["styles"].add("background-color: orange; text-decoration: underline;")
+                tk["styles"].add("background-color: #FFA500; color: black; text-decoration: underline;")
             if show_rimas_parciales and not entire_similar and best_suffix:
                 tk["suffix_to_highlight"] = best_suffix
 
+    # Adverbios, adjetivos, dobles verbos, pretérito perfecto
     i = 0
     while i < length:
         tk = tokens_copy[i]
         if not tk["processed"]:
+            # Adverbios en -mente
             if show_adverbios and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
-                tk["styles"].add("color: green; text-decoration: underline;")
+                tk["styles"].add("color: #7CFC00; text-decoration: underline;")
+            # Adjetivos
             if show_adjetivos and tk["pos"] == "ADJ":
-                tk["styles"].add("background-color: pink; text-decoration: underline;")
+                tk["styles"].add("background-color: #FF69B4; color: black; text-decoration: underline;")
+            # Dobles verbos
             if show_dobles_verbos:
                 if tk["lemma"] in ["empezar", "comenzar", "tratar"] and (i + 2) < length:
                     t1 = tokens_copy[i + 1]
                     t2 = tokens_copy[i + 2]
                     if t1["text"].lower() == "a" and "VerbForm=Inf" in t2["morph"]:
                         for x in [tk, t1, t2]:
-                            x["styles"].add("background-color: #dab4ff; text-decoration: underline;")
+                            x["styles"].add("background-color: #9370DB; color: black; text-decoration: underline;")
                         tk["processed"] = True
                         t1["processed"] = True
                         t2["processed"] = True
@@ -307,23 +296,25 @@ def construir_html(tokens_data, lt_data, original_text,
                         t1 = tokens_copy[i + 1]
                         if "VerbForm=Ger" in t1["morph"]:
                             for x in [tk, t1]:
-                                x["styles"].add("background-color: #dab4ff; text-decoration: underline;")
+                                x["styles"].add("background-color: #9370DB; color: black; text-decoration: underline;")
                             tk["processed"] = True
                             t1["processed"] = True
                             i += 2
                             continue
+            # Pretérito compuesto (haber + participio)
             if show_preterito_compuesto:
                 if tk["lemma"] == "haber" and "Pres" in tk["morph"] and (i + 1) < length:
                     t1 = tokens_copy[i + 1]
                     if "VerbForm=Part" in t1["morph"]:
                         for x in [tk, t1]:
-                            x["styles"].add("background-color: lightblue; text-decoration: underline;")
+                            x["styles"].add("background-color: #00CED1; color: black; text-decoration: underline;")
                         tk["processed"] = True
                         t1["processed"] = True
                         i += 2
                         continue
         i += 1
 
+    # Reconstrucción en HTML
     paragraphs = original_text.split("\n\n")
     total_tokens = len(tokens_copy)
     global_index = 0
@@ -345,6 +336,7 @@ def construir_html(tokens_data, lt_data, original_text,
                     global_index += 1
                     continue
                 if tk["start"] >= line_start_offset and tk["end"] <= line_end_offset:
+                    # Rimas parciales: resaltar solo el sufijo
                     if tk["suffix_to_highlight"]:
                         any_background = any("background-color" in s for s in tk["styles"])
                         if not any_background:
@@ -355,15 +347,15 @@ def construir_html(tokens_data, lt_data, original_text,
                                 prefix = word[:pos]
                                 matched = word[pos:pos+len(suffix)]
                                 postfix = word[pos+len(suffix):]
-                                partial_html = (
+                                line_html += (
                                     f"{prefix}"
-                                    f"<span style='background-color: #ffcc80; text-decoration: underline;'>"
+                                    f"<span style='background-color: #FF6347; color: black; text-decoration: underline;'>"
                                     f"{matched}</span>"
                                     f"{postfix}{tk['ws']}"
                                 )
-                                line_html += partial_html
                                 global_index += 1
                                 continue
+                    # Si hay estilos, aplicarlos
                     if tk["styles"]:
                         style_str = " ".join(tk["styles"])
                         line_html += f'<span style="{style_str}">{tk["text"]}</span>' + tk["ws"]
@@ -458,6 +450,7 @@ elif not edit_mode:
     st.session_state["resultado_html"] = html_result
     st.session_state["marca_counts"] = marca_counts
     st.markdown(html_result, unsafe_allow_html=True)
+
     colA, colB = st.columns(2)
     with colA:
         if st.button("Editar"):
@@ -478,14 +471,14 @@ elif not edit_mode:
             <div style="margin-bottom:20px;">
                 <strong>Funcionalidades y Colores:</strong>
                 <ul style="list-style-type: none; padding: 0;">
-                    <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                    <li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
-                    <li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                    <li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
-                    <li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
-                    <li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                    <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
-                    <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
+                    <li><span style='color: #7CFC00; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
+                    <li><span style='background-color: #FF69B4; color: black; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
+                    <li><span style='background-color: #FFA500; color: black; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                    <li><span style='background-color: #FF6347; color: black; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
+                    <li><span style='background-color: #9370DB; color: black; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
+                    <li><span style='background-color: #00CED1; color: black; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                    <li><span style='text-decoration: underline wavy #FF4500;'>Ortografía ({ortografia_count})</span></li>
+                    <li><span style='text-decoration: underline wavy #FFD700;'>Gramática ({gramatica_count})</span></li>
                 </ul>
             </div>
             """
@@ -560,14 +553,14 @@ else:
         <div style="margin-bottom:20px;">
             <strong>Funcionalidades y Colores:</strong>
             <ul style="list-style-type: none; padding: 0;">
-                <li><span style='color: green; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
-                <li><span style='background-color: pink; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
-                <li><span style='background-color: orange; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
-                <li><span style='background-color: #ffcc80; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
-                <li><span style='background-color: #dab4ff; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
-                <li><span style='background-color: lightblue; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                <li><span style='text-decoration: underline wavy red;'>Ortografía ({ortografia_count})</span></li>
-                <li><span style='text-decoration: underline wavy yellow;'>Gramática ({gramatica_count})</span></li>
+                <li><span style='color: #7CFC00; text-decoration: underline;'>Adverbios en -mente ({adverbios_count})</span></li>
+                <li><span style='background-color: #FF69B4; color: black; text-decoration: underline;'>Adjetivos ({adjetivos_count})</span></li>
+                <li><span style='background-color: #FFA500; color: black; text-decoration: underline;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                <li><span style='background-color: #FF6347; color: black; text-decoration: underline;'>Rimas Parciales ({rimas_count})</span></li>
+                <li><span style='background-color: #9370DB; color: black; text-decoration: underline;'>Dobles Verbos ({dobles_count})</span></li>
+                <li><span style='background-color: #00CED1; color: black; text-decoration: underline;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                <li><span style='text-decoration: underline wavy #FF4500;'>Ortografía ({ortografia_count})</span></li>
+                <li><span style='text-decoration: underline wavy #FFD700;'>Gramática ({gramatica_count})</span></li>
             </ul>
         </div>
         """
