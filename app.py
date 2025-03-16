@@ -18,10 +18,10 @@ from bs4 import BeautifulSoup
 nlp = spacy.load("es_core_news_md")
 
 # --------------------------------------------------------------------
-# Inicializa LanguageTool para español con manejo de errores
+# Inicializa LanguageTool para español usando un servidor remoto
 # --------------------------------------------------------------------
 try:
-    tool = language_tool_python.LanguageTool('es')
+    tool = language_tool_python.LanguageTool('es', remote_server='https://languagetool.org/api/')
 except language_tool_python.utils.LanguageToolError as e:
     st.error(f"Error al inicializar LanguageTool: {e}")
     tool = None
@@ -131,32 +131,36 @@ def common_suffix(word1, word2, min_len=3):
     return ""
 
 def analizar_texto(texto):
-    if tool is None:
-        st.error("LanguageTool no está disponible. No se pueden analizar errores gramaticales/ortográficos.")
-        lt_data = []
+    doc = nlp(texto)
+    tokens_data = []
+    for i, token in enumerate(doc):
+        corrected = correct_pos(token.text, str(token.pos_))
+        tokens_data.append({
+            "i": i,
+            "text": token.text,
+            "lemma": token.lemma_,
+            "pos": corrected,
+            "morph": str(token.morph),
+            "start": token.idx,
+            "end": token.idx + len(token.text),
+            "ws": token.whitespace_,
+        })
+    
+    lt_data = []
+    if tool is not None:
+        try:
+            lt_matches = tool.check(texto)
+            for match in lt_matches:
+                lt_data.append({
+                    "start": match.offset,
+                    "end": match.offset + match.errorLength,
+                    "category": match.category
+                })
+        except language_tool_python.utils.LanguageToolError as e:
+            st.warning(f"No se pudo realizar la corrección gramatical: {e}")
     else:
-        doc = nlp(texto)
-        lt_matches = tool.check(texto)
-        tokens_data = []
-        for i, token in enumerate(doc):
-            corrected = correct_pos(token.text, str(token.pos_))
-            tokens_data.append({
-                "i": i,
-                "text": token.text,
-                "lemma": token.lemma_,
-                "pos": corrected,
-                "morph": str(token.morph),
-                "start": token.idx,
-                "end": token.idx + len(token.text),
-                "ws": token.whitespace_,
-            })
-        lt_data = []
-        for match in lt_matches:
-            lt_data.append({
-                "start": match.offset,
-                "end": match.offset + match.errorLength,
-                "category": match.category
-            })
+        st.warning("LanguageTool no está disponible. No se pueden analizar errores gramaticales/ortográficos.")
+    
     return tokens_data, lt_data, texto
 
 def contar_marcas(tokens_copy):
