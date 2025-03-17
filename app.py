@@ -388,9 +388,9 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
     if show_preterito_compuesto:
         legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
     if show_orthography:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
+        legend_items.append(f"<li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px; color: black;'>Ortografía ({marca_counts.get('ortografía', 0)})</span></li>")
     if show_grammar:
-        legend_items.append(f"<li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
+        legend_items.append(f"<li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px; color: black;'>Gramática ({marca_counts.get('gramática', 0)})</span></li>")
     
     legend_html = f"""
     <div style="margin-top: 20px; padding: 10px; background-color: #e0e0e0; border-radius: 5px; border: 1px solid #ccc;">
@@ -464,14 +464,14 @@ else:
     else:
         # Área de análisis de texto
         st.sidebar.header("Opciones del análisis")
-        st.session_state["show_adverbios"] = st.sidebar.checkbox("Mostrar adverbios", st.session_state.get("show_adverbios", True))
-        st.session_state["show_adjetivos"] = st.sidebar.checkbox("Mostrar adjetivos", st.session_state.get("show_adjetivos", True))
-        st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Mostrar repeticiones totales", st.session_state.get("show_repeticiones_totales", True))
-        st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Mostrar rimas parciales", st.session_state.get("show_rimas_parciales", True))
-        st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Mostrar dobles verbos", st.session_state.get("show_dobles_verbos", True))
-        st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
-        st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
-        st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
+        st.session_state["show_adverbios"] = st.sidebar.checkbox("Ver adverbios en -mente", st.session_state.get("show_adverbios", True))
+        st.session_state["show_adjetivos"] = st.sidebar.checkbox("Ver adjetivos", st.session_state.get("show_adjetivos", True))
+        st.session_state["show_repeticiones_totales"] = st.sidebar.checkbox("Ver repeticiones totales", st.session_state.get("show_repeticiones_totales", True))
+        st.session_state["show_rimas_parciales"] = st.sidebar.checkbox("Ver rimas parciales", st.session_state.get("show_rimas_parciales", True))
+        st.session_state["show_dobles_verbos"] = st.sidebar.checkbox("Ver dobles verbos", st.session_state.get("show_dobles_verbos", True))
+        st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Ver pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
+        st.session_state["show_orthography"] = st.sidebar.checkbox("Ver errores ortográficos", st.session_state.get("show_orthography", False))
+        st.session_state["show_grammar"] = st.sidebar.checkbox("Ver errores gramaticales", st.session_state.get("show_grammar", False))
 
         # Mostrar leyenda en sidebar si hay análisis
         if st.session_state.get("analysis_done", False):
@@ -559,8 +559,8 @@ else:
                             <li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({rimas_count})</span></li>
                             <li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({dobles_count})</span></li>
                             <li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                            <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({ortografia_count})</span></li>
-                            <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({gramatica_count})</span></li>
+                            <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px; color: black;'>Ortografía ({ortografia_count})</span></li>
+                            <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px; color: black;'>Gramática ({gramatica_count})</span></li>
                         </ul>
                     </div>
                     """
@@ -637,8 +637,8 @@ else:
                         <li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({rimas_count})</span></li>
                         <li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({dobles_count})</span></li>
                         <li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
-                        <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({ortografia_count})</span></li>
-                        <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({gramatica_count})</span></li>
+                        <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px; color: black;'>Ortografía ({ortografia_count})</span></li>
+                        <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px; color: black;'>Gramática ({gramatica_count})</span></li>
                     </ul>
                 </div>
                 """
