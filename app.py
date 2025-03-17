@@ -36,8 +36,8 @@ if os.path.exists(USERS_FILE):
 else:
     users = {}
 
-# Forzar la existencia del usuario administrador
-if "alesongs@gmail.com" not in users:
+# Forzar la existencia del usuario administrador con is_admin: True
+if "alesongs@gmail.com" not in users or not users["alesongs@gmail.com"].get("is_admin", False):
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
         "nombre": "Administrador",
@@ -370,7 +370,7 @@ def clean_text(html_text):
     return soup.get_text(separator="\n")
 
 # --------------------------------------------------------------------
-# Función para generar la leyenda de colores con mejor contraste
+# Función para generar la leyenda de colores con mejor visibilidad
 # --------------------------------------------------------------------
 def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticiones_totales, show_rimas_parciales,
                     show_dobles_verbos, show_preterito_compuesto, show_orthography, show_grammar):
@@ -394,7 +394,7 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
     
     legend_html = f"""
     <div style="margin-top: 20px; padding: 10px; background-color: #e0e0e0; border-radius: 5px; border: 1px solid #ccc;">
-        <strong>Leyenda de Análisis:</strong>
+        <strong style="color: black;">Leyenda de Análisis:</strong>
         <ul style="list-style-type: none; padding: 0; margin: 0;">
             {''.join(legend_items)}
         </ul>
@@ -417,17 +417,14 @@ if not st.session_state["authenticated"]:
             st.session_state["user_email"] = email
             st.session_state["nombre"] = users[email]["nombre"]
             st.session_state["is_admin"] = users[email].get("is_admin", False)
+            # Redirigir automáticamente al panel de administración si es admin
+            if st.session_state["is_admin"]:
+                st.session_state["show_admin_panel"] = True
             st.success(f"Bienvenido, {st.session_state['nombre']}")
             st.rerun()
         else:
             st.error("Email o contraseña incorrectos")
 else:
-    # Botón adicional para administradores en la interfaz principal
-    if st.session_state["is_admin"] and not st.session_state["show_admin_panel"]:
-        if st.button("Ir al Panel de Administración"):
-            st.session_state["show_admin_panel"] = True
-            st.rerun()
-
     # Sidebar para usuarios autenticados
     if st.session_state["is_admin"]:
         st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']} (Admin)")
@@ -550,7 +547,7 @@ else:
                     gramatica_count = marca.get("gramática", 0)
                     legend_html = f"""
                     <div style="margin-bottom:20px;">
-                        <strong>Funcionalidades y Colores:</strong>
+                        <strong style="color: black;">Funcionalidades y Colores:</strong>
                         <ul style="list-style-type: none; padding: 0;">
                             <li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({adverbios_count})</span></li>
                             <li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({adjetivos_count})</span></li>
@@ -628,7 +625,7 @@ else:
                 gramatica_count = marca_counts.get("gramática", 0)
                 legend_html = f"""
                 <div style="margin-bottom:20px;">
-                    <strong>Funcionalidades y Colores:</strong>
+                    <strong style="color: black;">Funcionalidades y Colores:</strong>
                     <ul style="list-style-type: none; padding: 0;">
                         <li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({adverbios_count})</span></li>
                         <li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({adjetivos_count})</span></li>
