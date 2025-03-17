@@ -454,7 +454,11 @@ else:
                 with open(USERS_FILE, "w") as f:
                     json.dump(users, f)
                 st.success(f"Usuario {new_email} registrado exitosamente")
-                send_email(new_email, "Bienvenido", f"Hola {new_nombre}, tu cuenta ha sido creada.")
+                # Enviar email con el mensaje personalizado
+                send_email(new_email, "Bienvenido a Edita sobrio",
+                           f"Hola {new_nombre}: ya estás. Ya tienes cuenta en la app de Tinta chida Edita sobrio. "
+                           f"El email con el que iniciarás sesión es {new_email} y tu contraseña es {new_password}. "
+                           "Métele duro a la corrección, compa.")
             else:
                 st.error("El email ya está registrado")
     else:
