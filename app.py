@@ -36,7 +36,7 @@ if os.path.exists(USERS_FILE):
 else:
     users = {}
 
-# Forzar la existencia del usuario administrador (si no existe, se añade)
+# Forzar la existencia del usuario administrador
 if "alesongs@gmail.com" not in users:
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
     users["alesongs@gmail.com"] = {
@@ -57,7 +57,6 @@ if "user_email" not in st.session_state:
     st.session_state["user_email"] = ""
 if "nombre" not in st.session_state:
     st.session_state["nombre"] = ""
-# Forzamos que si el email es el de admin, se marque como admin (incluso si no viene en users.json)
 if "is_admin" not in st.session_state:
     st.session_state["is_admin"] = False
 if "show_admin_panel" not in st.session_state:
@@ -150,8 +149,8 @@ def analizar_texto(texto):
     lt_data = []
     if tool is not None:
         try:
-            # Aumentamos el límite de caracteres de 1000 a 5000
-            max_length = 5000
+            # Dividir el texto en bloques de 1000 caracteres
+            max_length = 1000
             text_blocks = [texto[i:i+max_length] for i in range(0, len(texto), max_length)]
             offset = 0
             for block in text_blocks:
@@ -371,7 +370,7 @@ def clean_text(html_text):
     return soup.get_text(separator="\n")
 
 # --------------------------------------------------------------------
-# Función para generar la leyenda de colores
+# Función para generar la leyenda de colores con mejor contraste
 # --------------------------------------------------------------------
 def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticiones_totales, show_rimas_parciales,
                     show_dobles_verbos, show_preterito_compuesto, show_orthography, show_grammar):
@@ -406,7 +405,7 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
 # --------------------------------------------------------------------
 # Lógica principal de la app
 # --------------------------------------------------------------------
-st.title("Edita sobrio")  # Título principal
+st.title("Edita sobrio")  # Título principal en todas las vistas
 
 if not st.session_state["authenticated"]:
     st.markdown("### Iniciar Sesión")
@@ -417,37 +416,27 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True
             st.session_state["user_email"] = email
             st.session_state["nombre"] = users[email]["nombre"]
-            # Si el email es de admin, forzamos is_admin True
-            if email == "alesongs@gmail.com":
-                st.session_state["is_admin"] = True
-            else:
-                st.session_state["is_admin"] = users[email].get("is_admin", False)
+            st.session_state["is_admin"] = users[email].get("is_admin", False)
             st.success(f"Bienvenido, {st.session_state['nombre']}")
-            st.set_query_params()  # Limpiar query params
-            st.stop()
+            st.rerun()
         else:
             st.error("Email o contraseña incorrectos")
 else:
-    # Para administradores, usamos un radio button en la sidebar para cambiar entre admin y análisis
-    if st.session_state["is_admin"]:
-        opcion = st.sidebar.radio("Seleccione una opción:", ("Panel de Administración", "Análisis de Texto"))
-        if opcion == "Panel de Administración":
+    # Botón adicional para administradores en la interfaz principal
+    if st.session_state["is_admin"] and not st.session_state["show_admin_panel"]:
+        if st.button("Ir al Panel de Administración"):
             st.session_state["show_admin_panel"] = True
-        else:
+            st.rerun()
+
+    # Sidebar para usuarios autenticados
+    if st.session_state["is_admin"]:
+        st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']} (Admin)")
+        if st.sidebar.button("Panel de Administración"):
+            st.session_state["show_admin_panel"] = True
+        if st.sidebar.button("Análisis de Texto"):
             st.session_state["show_admin_panel"] = False
-        st.sidebar.markdown(f"**Administrador:** {st.session_state['nombre']}")
     else:
         st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']}")
-
-    # Botón para cerrar sesión
-    if st.sidebar.button("Cerrar Sesión"):
-        st.session_state["authenticated"] = False
-        st.session_state["user_email"] = ""
-        st.session_state["nombre"] = ""
-        st.session_state["is_admin"] = False
-        st.session_state["show_admin_panel"] = False
-        st.set_query_params()
-        st.stop()
 
     # Panel de administración
     if st.session_state["is_admin"] and st.session_state["show_admin_panel"]:
@@ -482,7 +471,8 @@ else:
         st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Mostrar pretérito compuesto", st.session_state.get("show_preterito_compuesto", True))
         st.session_state["show_orthography"] = st.sidebar.checkbox("Mostrar errores ortográficos", st.session_state.get("show_orthography", False))
         st.session_state["show_grammar"] = st.sidebar.checkbox("Mostrar errores gramaticales", st.session_state.get("show_grammar", False))
-        
+
+        # Mostrar leyenda en sidebar si hay análisis
         if st.session_state.get("analysis_done", False):
             leyenda_html = generar_leyenda(
                 st.session_state.get("marca_counts", {}),
@@ -497,6 +487,7 @@ else:
             )
             st.sidebar.markdown(leyenda_html, unsafe_allow_html=True)
 
+        # Lógica de análisis de texto
         if not st.session_state["analysis_done"]:
             st.markdown("### Pega aquí tu obra maestra")
             texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -522,8 +513,7 @@ else:
                 st.session_state["analysis_done"] = True
                 st.session_state["edit_mode"] = False
                 st.session_state["marca_counts"] = marca_counts
-                st.set_query_params()  # Limpiar query params
-                st.stop()
+                st.rerun()
         elif not st.session_state["edit_mode"]:
             st.markdown("### Texto analizado")
             html_result, marca_counts = construir_html(
@@ -546,21 +536,33 @@ else:
             with colA:
                 if st.button("Editar"):
                     st.session_state["edit_mode"] = True
-                    st.set_query_params()
-                    st.stop()
+                    st.rerun()
             with colB:
                 if st.button("Exportar a PDF"):
-                    legend_html = generar_leyenda(
-                        st.session_state["marca_counts"],
-                        st.session_state["show_adverbios"],
-                        st.session_state["show_adjetivos"],
-                        st.session_state["show_repeticiones_totales"],
-                        st.session_state["show_rimas_parciales"],
-                        st.session_state["show_dobles_verbos"],
-                        st.session_state["show_preterito_compuesto"],
-                        st.session_state["show_orthography"],
-                        st.session_state["show_grammar"]
-                    )
+                    marca = st.session_state.get("marca_counts", {})
+                    adverbios_count = marca.get("adverbios", 0)
+                    adjetivos_count = marca.get("adjetivos", 0)
+                    rep_totales_count = marca.get("repeticiones_totales", 0)
+                    rimas_count = marca.get("rimas_parciales", 0)
+                    dobles_count = marca.get("dobles_verbos", 0)
+                    preterito_count = marca.get("pretérito_compuesto", 0)
+                    ortografia_count = marca.get("ortografía", 0)
+                    gramatica_count = marca.get("gramática", 0)
+                    legend_html = f"""
+                    <div style="margin-bottom:20px;">
+                        <strong>Funcionalidades y Colores:</strong>
+                        <ul style="list-style-type: none; padding: 0;">
+                            <li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({adverbios_count})</span></li>
+                            <li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({adjetivos_count})</span></li>
+                            <li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({rep_totales_count})</span></li>
+                            <li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({rimas_count})</span></li>
+                            <li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({dobles_count})</span></li>
+                            <li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({preterito_count})</span></li>
+                            <li><span style='text-decoration: underline wavy red; background-color: #f0f0f0; padding: 2px;'>Ortografía ({ortografia_count})</span></li>
+                            <li><span style='text-decoration: underline wavy yellow; background-color: #f0f0f0; padding: 2px;'>Gramática ({gramatica_count})</span></li>
+                        </ul>
+                    </div>
+                    """
                     pdf_html = f"<html><body style='font-family: Arial;'>{legend_html}{html_result}</body></html>"
                     pdf_path = exportar_a_pdf(pdf_html)
                     with open(pdf_path, "rb") as f:
@@ -598,12 +600,10 @@ else:
                 st.session_state["resultado_html"] = final_html
                 st.session_state["marca_counts"] = marca_counts
                 st.session_state["edit_mode"] = False
-                st.set_query_params()
-                st.stop()
+                st.rerun()
             elif return_btn:
                 st.session_state["edit_mode"] = False
-                st.set_query_params()
-                st.stop()
+                st.rerun()
             elif export_btn:
                 html_result, marca_counts = construir_html(
                     st.session_state["tokens_data"],
@@ -646,11 +646,11 @@ else:
                 with open(pdf_path, "rb") as f:
                     st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
+    # Botón para cerrar sesión
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["authenticated"] = False
         st.session_state["user_email"] = ""
         st.session_state["nombre"] = ""
         st.session_state["is_admin"] = False
         st.session_state["show_admin_panel"] = False
-        st.set_query_params()
-        st.stop()
+        st.rerun()
