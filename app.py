@@ -11,6 +11,7 @@ from sendgrid.helpers.mail import Mail
 from xhtml2pdf import pisa
 from streamlit_quill import st_quill
 from bs4 import BeautifulSoup
+import secrets
 
 # --------------------------------------------------------------------
 # Carga el modelo spaCy en español
@@ -31,8 +32,12 @@ except language_tool_python.utils.LanguageToolError as e:
 # --------------------------------------------------------------------
 USERS_FILE = "users.json"
 if os.path.exists(USERS_FILE):
-    with open(USERS_FILE, "r") as f:
-        users = json.load(f)
+    try:
+        with open(USERS_FILE, "r") as f:
+            users = json.load(f)
+    except json.JSONDecodeError:
+        st.error("Error al leer el archivo de usuarios. El archivo está corrupto.")
+        users = {}
 else:
     users = {}
 
@@ -65,6 +70,10 @@ if "analysis_done" not in st.session_state:
     st.session_state["analysis_done"] = False
 if "edit_mode" not in st.session_state:
     st.session_state["edit_mode"] = False
+if "editing_user" not in st.session_state:
+    st.session_state["editing_user"] = None
+if "changing_password" not in st.session_state:
+    st.session_state["changing_password"] = None
 
 # --------------------------------------------------------------------
 # Función para enviar email usando SendGrid
@@ -149,7 +158,6 @@ def analizar_texto(texto):
     lt_data = []
     if tool is not None:
         try:
-            # Dividir el texto en bloques de 1000 caracteres
             max_length = 1000
             text_blocks = [texto[i:i+max_length] for i in range(0, len(texto), max_length)]
             offset = 0
@@ -405,7 +413,7 @@ def generar_leyenda(marca_counts, show_adverbios, show_adjetivos, show_repeticio
 # --------------------------------------------------------------------
 # Lógica principal de la app
 # --------------------------------------------------------------------
-st.title("Edita sobrio")  # Título principal en todas las vistas
+st.title("Edita sobrio")
 
 if not st.session_state["authenticated"]:
     st.markdown("### Iniciar Sesión")
@@ -417,7 +425,6 @@ if not st.session_state["authenticated"]:
             st.session_state["user_email"] = email
             st.session_state["nombre"] = users[email]["nombre"]
             st.session_state["is_admin"] = users[email].get("is_admin", False)
-            # Redirigir automáticamente al panel de administración si es admin
             if st.session_state["is_admin"]:
                 st.session_state["show_admin_panel"] = True
             st.success(f"Bienvenido, {st.session_state['nombre']}")
@@ -425,7 +432,6 @@ if not st.session_state["authenticated"]:
         else:
             st.error("Email o contraseña incorrectos")
 else:
-    # Sidebar para usuarios autenticados
     if st.session_state["is_admin"]:
         st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']} (Admin)")
         if st.sidebar.button("Panel de Administración"):
@@ -435,9 +441,9 @@ else:
     else:
         st.sidebar.markdown(f"Bienvenido, {st.session_state['nombre']}")
 
-    # Panel de administración
     if st.session_state["is_admin"] and st.session_state["show_admin_panel"]:
         st.markdown("### Panel de Administración")
+        
         st.subheader("Registrar Nuevo Usuario")
         new_nombre = st.text_input("Nombre del nuevo usuario")
         new_email = st.text_input("Email del nuevo usuario")
@@ -454,15 +460,80 @@ else:
                 with open(USERS_FILE, "w") as f:
                     json.dump(users, f)
                 st.success(f"Usuario {new_email} registrado exitosamente")
-                # Enviar email con el mensaje personalizado
                 send_email(new_email, "Bienvenido a Edita sobrio",
                            f"Hola {new_nombre}: ya estás. Ya tienes cuenta en la app de Tinta chida Edita sobrio. "
                            f"El email con el que iniciarás sesión es {new_email} y tu contraseña es {new_password}. "
-                           "Métele duro a la corrección, compa.")
+                           "Métele duro a la corrección, compa. "
+                           "Puedes acceder a la aplicación aquí: https://editasobrio.streamlit.app/")
             else:
                 st.error("El email ya está registrado")
+        
+        st.subheader("Gestionar Usuarios Existentes")
+        if st.session_state["editing_user"] is not None:
+            user_to_edit = users[st.session_state["editing_user"]]
+            edit_nombre = st.text_input("Nombre", value=user_to_edit["nombre"])
+            edit_email = st.text_input("Email", value=user_to_edit["email"])
+            if st.button("Guardar Cambios"):
+                if edit_email != st.session_state["editing_user"] and edit_email in users:
+                    st.error("El nuevo email ya está registrado")
+                else:
+                    users[edit_email] = {
+                        "nombre": edit_nombre,
+                        "email": edit_email,
+                        "password": user_to_edit["password"],
+                        "is_admin": user_to_edit.get("is_admin", False)
+                    }
+                    if edit_email != st.session_state["editing_user"]:
+                        del users[st.session_state["editing_user"]]
+                    with open(USERS_FILE, "w") as f:
+                        json.dump(users, f)
+                    st.success("Usuario actualizado")
+                    st.session_state["editing_user"] = None
+                    st.rerun()
+        elif st.session_state["changing_password"] is not None:
+            new_password = st.text_input("Nueva Contraseña", type="password")
+            if st.button("Cambiar Contraseña"):
+                hashed_password = hash_password(new_password)
+                users[st.session_state["changing_password"]]["password"] = hashed_password
+                with open(USERS_FILE, "w") as f:
+                    json.dump(users, f)
+                st.success("Contraseña cambiada")
+                st.session_state["changing_password"] = None
+                st.rerun()
+        else:
+            for email, user_data in list(users.items()):
+                if email == "alesongs@gmail.com":
+                    continue
+                st.write(f"**Nombre:** {user_data['nombre']} **Email:** {email}")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    if st.button(f"Editar {email}"):
+                        st.session_state["editing_user"] = email
+                        st.rerun()
+                with col2:
+                    if st.button(f"Eliminar {email}"):
+                        del users[email]
+                        with open(USERS_FILE, "w") as f:
+                            json.dump(users, f)
+                        st.success("Usuario eliminado")
+                        st.rerun()
+                with col3:
+                    if st.button(f"Cambiar Contraseña {email}"):
+                        st.session_state["changing_password"] = email
+                        st.rerun()
+                with col4:
+                    if st.button(f"Reenviar Correo {email}"):
+                        temp_password = secrets.token_urlsafe(12)
+                        hashed_temp_password = hash_password(temp_password)
+                        users[email]["password"] = hashed_temp_password
+                        with open(USERS_FILE, "w") as f:
+                            json.dump(users, f)
+                        send_email(email, "Restablecimiento de Contraseña",
+                                   f"Hola {users[email]['nombre']}: Tu nueva contraseña temporal es {temp_password}. "
+                                   "Por favor, cámbiala después de iniciar sesión. "
+                                   "Puedes acceder a la aplicación aquí: https://editasobrio.streamlit.app/")
+                        st.success("Correo reenviado con nueva contraseña temporal")
     else:
-        # Área de análisis de texto
         st.sidebar.header("Opciones del análisis")
         st.session_state["show_adverbios"] = st.sidebar.checkbox("Ver adverbios en -mente", st.session_state.get("show_adverbios", True))
         st.session_state["show_adjetivos"] = st.sidebar.checkbox("Ver adjetivos", st.session_state.get("show_adjetivos", True))
@@ -473,7 +544,6 @@ else:
         st.session_state["show_orthography"] = st.sidebar.checkbox("Ver errores ortográficos", st.session_state.get("show_orthography", False))
         st.session_state["show_grammar"] = st.sidebar.checkbox("Ver errores gramaticales", st.session_state.get("show_grammar", False))
 
-        # Mostrar leyenda en sidebar si hay análisis
         if st.session_state.get("analysis_done", False):
             leyenda_html = generar_leyenda(
                 st.session_state.get("marca_counts", {}),
@@ -488,7 +558,6 @@ else:
             )
             st.sidebar.markdown(leyenda_html, unsafe_allow_html=True)
 
-        # Lógica de análisis de texto
         if not st.session_state["analysis_done"]:
             st.markdown("### Pega aquí tu obra maestra")
             texto_inicial = st.text_area("", height=300, label_visibility="hidden")
@@ -647,7 +716,6 @@ else:
                 with open(pdf_path, "rb") as f:
                     st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
-    # Botón para cerrar sesión
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state["authenticated"] = False
         st.session_state["user_email"] = ""
