@@ -4,8 +4,7 @@ import language_tool_python
 import difflib
 import string
 import bcrypt
-import json
-import os
+import sqlite3
 import sendgrid
 from sendgrid.helpers.mail import Mail
 from xhtml2pdf import pisa
@@ -28,30 +27,22 @@ except language_tool_python.utils.LanguageToolError as e:
     tool = None
 
 # --------------------------------------------------------------------
-# Configuración de usuarios para login usando un archivo JSON
+# Configuración de la base de datos SQLite
 # --------------------------------------------------------------------
-USERS_FILE = "users.json"
-if os.path.exists(USERS_FILE):
-    try:
-        with open(USERS_FILE, "r") as f:
-            users = json.load(f)
-    except json.JSONDecodeError:
-        st.error("Error al leer el archivo de usuarios. El archivo está corrupto.")
-        users = {}
-else:
-    users = {}
+conn = sqlite3.connect('users.db', check_same_thread=False)
+c = conn.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS users
+             (email TEXT PRIMARY KEY, nombre TEXT, password TEXT, is_admin INTEGER)''')
+conn.commit()
 
-# Forzar la existencia del usuario administrador con is_admin: True
-if "alesongs@gmail.com" not in users or not users["alesongs@gmail.com"].get("is_admin", False):
+# Forzar la existencia del usuario administrador
+admin_email = "alesongs@gmail.com"
+c.execute("SELECT * FROM users WHERE email=?", (admin_email,))
+if not c.fetchone():
     hashed_admin = bcrypt.hashpw("#diimeEz@3ellaKit@#".encode(), bcrypt.gensalt()).decode()
-    users["alesongs@gmail.com"] = {
-        "nombre": "Administrador",
-        "email": "alesongs@gmail.com",
-        "password": hashed_admin,
-        "is_admin": True
-    }
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f)
+    c.execute("INSERT INTO users (email, nombre, password, is_admin) VALUES (?, ?, ?, 1)", 
+              (admin_email, "Administrador", hashed_admin))
+    conn.commit()
 
 # --------------------------------------------------------------------
 # Inicialización de st.session_state
@@ -74,6 +65,35 @@ if "editing_user" not in st.session_state:
     st.session_state["editing_user"] = None
 if "changing_password" not in st.session_state:
     st.session_state["changing_password"] = None
+
+# --------------------------------------------------------------------
+# Funciones de base de datos
+# --------------------------------------------------------------------
+def get_all_users():
+    c.execute("SELECT * FROM users")
+    return c.fetchall()
+
+def get_user_by_email(email):
+    c.execute("SELECT * FROM users WHERE email=?", (email,))
+    return c.fetchone()
+
+def register_user(nombre, email, password):
+    hashed_password = hash_password(password)
+    c.execute("INSERT INTO users (email, nombre, password, is_admin) VALUES (?, ?, ?, 0)", (email, nombre, hashed_password))
+    conn.commit()
+
+def update_user(old_email, new_email, nombre):
+    c.execute("UPDATE users SET email=?, nombre=? WHERE email=?", (new_email, nombre, old_email))
+    conn.commit()
+
+def delete_user(email):
+    c.execute("DELETE FROM users WHERE email=?", (email,))
+    conn.commit()
+
+def reset_password(email, new_password):
+    hashed_password = hash_password(new_password)
+    c.execute("UPDATE users SET password=? WHERE email=?", (hashed_password, email))
+    conn.commit()
 
 # --------------------------------------------------------------------
 # Función para enviar email usando SendGrid
@@ -420,11 +440,12 @@ if not st.session_state["authenticated"]:
     email = st.text_input("Email")
     password = st.text_input("Contraseña", type="password")
     if st.button("Iniciar Sesión"):
-        if email in users and check_password(users[email]["password"], password):
+        user = get_user_by_email(email)
+        if user and check_password(user[2], password):  # user[2] es la contraseña hasheada
             st.session_state["authenticated"] = True
             st.session_state["user_email"] = email
-            st.session_state["nombre"] = users[email]["nombre"]
-            st.session_state["is_admin"] = users[email].get("is_admin", False)
+            st.session_state["nombre"] = user[1]  # user[1] es el nombre
+            st.session_state["is_admin"] = bool(user[3])  # user[3] es is_admin
             if st.session_state["is_admin"]:
                 st.session_state["show_admin_panel"] = True
             st.success(f"Bienvenido, {st.session_state['nombre']}")
@@ -449,16 +470,8 @@ else:
         new_email = st.text_input("Email del nuevo usuario")
         new_password = st.text_input("Contraseña del nuevo usuario", type="password")
         if st.button("Registrar Usuario"):
-            if new_email not in users:
-                hashed_password = hash_password(new_password)
-                users[new_email] = {
-                    "nombre": new_nombre,
-                    "email": new_email,
-                    "password": hashed_password,
-                    "is_admin": False
-                }
-                with open(USERS_FILE, "w") as f:
-                    json.dump(users, f)
+            if not get_user_by_email(new_email):
+                register_user(new_nombre, new_email, new_password)
                 st.success(f"Usuario {new_email} registrado exitosamente")
                 send_email(new_email, "Bienvenido a Edita sobrio",
                            f"Hola {new_nombre}: ya estás. Ya tienes cuenta en la app de Tinta chida Edita sobrio. "
@@ -470,69 +483,52 @@ else:
         
         st.subheader("Gestionar Usuarios Existentes")
         if st.session_state["editing_user"] is not None:
-            user_to_edit = users[st.session_state["editing_user"]]
-            edit_nombre = st.text_input("Nombre", value=user_to_edit["nombre"])
-            edit_email = st.text_input("Email", value=user_to_edit["email"])
+            user_to_edit = get_user_by_email(st.session_state["editing_user"])
+            st.subheader(f"Editando a {user_to_edit[1]}")
+            edit_nombre = st.text_input("Nombre", value=user_to_edit[1])
+            edit_email = st.text_input("Email", value=user_to_edit[0])
             if st.button("Guardar Cambios"):
-                if edit_email != st.session_state["editing_user"] and edit_email in users:
+                if edit_email != st.session_state["editing_user"] and get_user_by_email(edit_email):
                     st.error("El nuevo email ya está registrado")
                 else:
-                    users[edit_email] = {
-                        "nombre": edit_nombre,
-                        "email": edit_email,
-                        "password": user_to_edit["password"],
-                        "is_admin": user_to_edit.get("is_admin", False)
-                    }
-                    if edit_email != st.session_state["editing_user"]:
-                        del users[st.session_state["editing_user"]]
-                    with open(USERS_FILE, "w") as f:
-                        json.dump(users, f)
+                    update_user(st.session_state["editing_user"], edit_email, edit_nombre)
                     st.success("Usuario actualizado")
                     st.session_state["editing_user"] = None
                     st.rerun()
         elif st.session_state["changing_password"] is not None:
             new_password = st.text_input("Nueva Contraseña", type="password")
             if st.button("Cambiar Contraseña"):
-                hashed_password = hash_password(new_password)
-                users[st.session_state["changing_password"]]["password"] = hashed_password
-                with open(USERS_FILE, "w") as f:
-                    json.dump(users, f)
+                reset_password(st.session_state["changing_password"], new_password)
                 st.success("Contraseña cambiada")
                 st.session_state["changing_password"] = None
                 st.rerun()
         else:
-            for email, user_data in list(users.items()):
-                if email == "alesongs@gmail.com":
+            users = get_all_users()
+            for user in users:
+                if user[0] == "alesongs@gmail.com":  # No mostrar al admin en la lista editable
                     continue
-                st.write(f"**Nombre:** {user_data['nombre']} **Email:** {email}")
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    if st.button(f"Editar {email}"):
-                        st.session_state["editing_user"] = email
-                        st.rerun()
-                with col2:
-                    if st.button(f"Eliminar {email}"):
-                        del users[email]
-                        with open(USERS_FILE, "w") as f:
-                            json.dump(users, f)
-                        st.success("Usuario eliminado")
-                        st.rerun()
-                with col3:
-                    if st.button(f"Cambiar Contraseña {email}"):
-                        st.session_state["changing_password"] = email
-                        st.rerun()
-                with col4:
-                    if st.button(f"Reenviar Correo {email}"):
-                        temp_password = secrets.token_urlsafe(12)
-                        hashed_temp_password = hash_password(temp_password)
-                        users[email]["password"] = hashed_temp_password
-                        with open(USERS_FILE, "w") as f:
-                            json.dump(users, f)
-                        send_email(email, "Restablecimiento de Contraseña",
-                                   f"Hola {users[email]['nombre']}: Tu nueva contraseña temporal es {temp_password}. "
-                                   "Por favor, cámbiala después de iniciar sesión. "
-                                   "Puedes acceder a la aplicación aquí: https://editasobrio.streamlit.app/")
-                        st.success("Correo reenviado con nueva contraseña temporal")
+                with st.expander(f"{user[1]} ({user[0]})"):
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        if st.button("Editar", key=f"edit_{user[0]}"):
+                            st.session_state["editing_user"] = user[0]
+                    with col2:
+                        if st.button("Eliminar", key=f"delete_{user[0]}"):
+                            delete_user(user[0])
+                            st.success("Usuario eliminado")
+                            st.rerun()
+                    with col3:
+                        if st.button("Cambiar Contraseña", key=f"change_{user[0]}"):
+                            st.session_state["changing_password"] = user[0]
+                    with col4:
+                        if st.button("Reenviar Correo", key=f"resend_{user[0]}"):
+                            temp_password = secrets.token_urlsafe(12)
+                            reset_password(user[0], temp_password)
+                            send_email(user[0], "Restablecimiento de Contraseña",
+                                       f"Hola {user[1]}: Tu nueva contraseña temporal es {temp_password}. "
+                                       "Por favor, cámbiala después de iniciar sesión. "
+                                       "Puedes acceder a la aplicación aquí: https://editasobrio.streamlit.app/")
+                            st.success("Correo reenviado con nueva contraseña temporal")
     else:
         st.sidebar.header("Opciones del análisis")
         st.session_state["show_adverbios"] = st.sidebar.checkbox("Ver adverbios en -mente", st.session_state.get("show_adverbios", True))
