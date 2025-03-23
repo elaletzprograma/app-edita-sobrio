@@ -1,6 +1,5 @@
-sd-env/
-stable-diffusion-webui/
-edita-sobrio.git/
-sd-env/
-stable-diffusion-webui/
-edita-sobrio.git.bfg-report/
+# Archivos de sistema macOS
+.DS_Store
+
+# Ignorar users.json (si ya no lo usas)
+users.json
