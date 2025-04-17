@@ -347,6 +347,9 @@ st.session_state["show_preterito_compuesto"] = st.sidebar.checkbox("Ver pretéri
 st.session_state["show_orthography"] = st.sidebar.checkbox("Ver errores ortográficos", st.session_state.get("show_orthography", False))
 st.session_state["show_grammar"] = st.sidebar.checkbox("Ver errores gramaticales", st.session_state.get("show_grammar", False))
 
+# Agregar el enlace "¿Cómo funciona?" en la barra lateral
+st.sidebar.markdown("[¿Cómo funciona?](https://elaletz.com/app-edita-sobrio/)", unsafe_allow_html=True)
+
 # Mostrar leyenda en sidebar si hay análisis
 if st.session_state.get("analysis_done", False):
     leyenda_html = generar_leyenda(
@@ -520,3 +523,11 @@ else:
         pdf_path = exportar_a_pdf(pdf_html)
         with open(pdf_path, "rb") as f:
             st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
+
+# Agregar la leyenda al final de la página principal
+st.markdown("""
+<p style='font-size: small; color: #666; text-align: center; margin-top: 50px;'>
+    App creada por <a href="http://www.elaletz.com" target="_blank">El Aletz</a>, Escritor. Aprendiz de boxeador. Bellako onírico. Punk imaginal.<br>
+    Prueba la app y dime cómo mejorarla o qué características agregarle: <a href="mailto:escribele@elaletz.com">escribele@elaletz.com</a>
+</p>
+""", unsafe_allow_html=True)
