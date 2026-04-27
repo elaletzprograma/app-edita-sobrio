@@ -16,11 +16,9 @@ nlp = spacy.load("es_core_news_md")
 # Inicializa LanguageTool para español usando un servidor remoto
 # --------------------------------------------------------------------
 try:
-    # Quitamos la instrucción de usar el remote_server.
-    # Al no ponerle URL, la librería usará el Java local automáticamente.
-    tool = language_tool_python.LanguageTool('es') 
+    tool = language_tool_python.LanguageTool('es', remote_server='https://languagetool.org/api/')
 except Exception as e:
-    st.warning(f"Error al inicializar LanguageTool de forma local: {e}")
+    st.warning("El servidor de ortografía está saturado en este momento. El análisis de repeticiones y adverbios seguirá funcionando.")
     tool = None
 
 # --------------------------------------------------------------------
