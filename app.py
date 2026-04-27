@@ -18,10 +18,31 @@ def load_spacy_model():
 
 nlp = load_spacy_model()
 
+# --------------------------------------------------------------------
+# Inicialización de st.session_state (¡El bloque que faltaba!)
+# --------------------------------------------------------------------
+if "analysis_done" not in st.session_state:
+    st.session_state["analysis_done"] = False
+if "edit_mode" not in st.session_state:
+    st.session_state["edit_mode"] = False
+
 # Listas de control para las Reglas Contextuales
 VOCATIVOS_FRECUENTES = {"puto", "puta", "cabrón", "cabrona", "pendejo", "pendeja", "estúpido", "estúpida", "wey", "loco", "morra", "vato"}
 VERBOS_AMBIGUOS = {"corto", "bajo", "canto", "río", "fallo", "paso"}
 AUXILIARES_PERIFRASIS = {"ir", "seguir", "venir", "andar", "estar", "poder", "deber", "tener", "empezar", "comenzar", "tratar"}
+
+# --------------------------------------------------------------------
+# Funciones Auxiliares (PDF y Limpieza)
+# --------------------------------------------------------------------
+def exportar_a_pdf(html_content):
+    pdf_path = "texto_analizado.pdf"
+    with open(pdf_path, "wb") as pdf_file:
+        pisa.CreatePDF(html_content, dest=pdf_file)
+    return pdf_path
+
+def clean_text(html_text):
+    soup = BeautifulSoup(html_text, "html.parser")
+    return soup.get_text(separator="\n")
 
 # --------------------------------------------------------------------
 # Reglas de Inteligencia Contextual
@@ -29,36 +50,32 @@ AUXILIARES_PERIFRASIS = {"ir", "seguir", "venir", "andar", "estar", "poder", "de
 def correct_pos_smart(token):
     text_lower = token.text.lower()
     pos = token.pos_
-    tag = token.tag_
     dep = token.dep_
     
     # REGLA A: Detector de Vocativos (Insultos/Apelativos)
-    # Si es una palabra de nuestra lista y está aislada por puntuación o marcada como vocativo
     if text_lower in VOCATIVOS_FRECUENTES:
-        if dep == "vocative" or token.nbor(-1).text in [",", "!", "¡"] or token.nbor(1).text in [",", "!", "¡"]:
+        is_vocative = (dep == "vocative")
+        if token.i > 0 and token.nbor(-1).text in [",", "!", "¡"]: is_vocative = True
+        if token.i < len(token.doc)-1 and token.nbor(1).text in [",", "!", "¡"]: is_vocative = True
+        
+        if is_vocative:
             return "NOUN"
 
     # REGLA B: Verbos disfrazados (Ej: "corto tantito papel")
     if text_lower in VERBOS_AMBIGUOS:
-        # Si el siguiente es un sustantivo y no hay un sustantivo antes que lo califique
-        try:
-            if token.nbor(1).pos_ in ["NOUN", "DET"]:
-                return "VERB"
-        except: pass
+        if token.i < len(token.doc)-1 and token.nbor(1).pos_ in ["NOUN", "DET"]:
+            return "VERB"
 
     # REGLA C: La regla de la Sustantivación (Los determinantes)
-    # Si un "adjetivo" tiene un artículo o demostrativo antes, es sustantivo
     if pos == "ADJ":
-        try:
-            if token.nbor(-1).pos_ == "DET":
-                return "NOUN"
-        except: pass
+        if token.i > 0 and token.nbor(-1).pos_ == "DET":
+            return "NOUN"
 
-    # REGLA D: Adverbios de modo terminados en "o" (Ej: "los seco, tranquilo,")
-    if text_lower == "tranquilo" and (dep == "advmod" or token.nbor(-1).text == ","):
+    # REGLA D: Adverbios de modo terminados en "o"
+    if text_lower == "tranquilo" and (dep == "advmod" or (token.i > 0 and token.nbor(-1).text == ",")):
         return "ADV"
 
-    # Filtro de Participios (Evitar que "hecho" o "ahogado" sean adjetivos)
+    # Filtro de Participios
     if "VerbForm=Part" in str(token.morph):
         return "VERB"
 
@@ -90,7 +107,7 @@ def is_similar(word1, word2):
     w1, w2 = clean(word1), clean(word2)
     if w1 == w2: return True
     if min(len(w1), len(w2)) < 4: return False
-    return difflib.SequenceMatcher(None, w1, w2).ratio() >= 0.85 # Un poco más estricto
+    return difflib.SequenceMatcher(None, w1, w2).ratio() >= 0.85
 
 def common_suffix(word1, word2, min_len=3):
     w1, w2 = word1.lower(), word2.lower()
@@ -98,6 +115,21 @@ def common_suffix(word1, word2, min_len=3):
     while i < len(w1) and i < len(w2) and w1[-1-i] == w2[-1-i]:
         i += 1
     return w1[len(w1)-i:] if i >= min_len else ""
+
+def contar_marcas(tokens_copy):
+    counts = {
+        "adverbios": 0, "adjetivos": 0, "repeticiones_totales": 0,
+        "rimas_parciales": 0, "dobles_verbos": 0, "pretérito_compuesto": 0
+    }
+    for token in tokens_copy:
+        styles_str = " ".join(token.get("styles", []))
+        if "color: green" in styles_str: counts["adverbios"] += 1
+        if "background-color: pink" in styles_str: counts["adjetivos"] += 1
+        if "background-color: orange" in styles_str: counts["repeticiones_totales"] += 1
+        if token.get("suffix_to_highlight", ""): counts["rimas_parciales"] += 1
+        if "background-color: #dab4ff" in styles_str: counts["dobles_verbos"] += 1
+        if "background-color: lightblue" in styles_str: counts["pretérito_compuesto"] += 1
+    return counts
 
 def construir_html(tokens_data, original_text, options):
     tokens_copy = [t.copy() for t in tokens_data]
@@ -108,10 +140,10 @@ def construir_html(tokens_data, original_text, options):
     
     length = len(tokens_copy)
 
-    # 1. Análisis de Repeticiones y Rimas (Ventana reducida a 20 palabras)
+    # 1. Análisis de Repeticiones y Rimas
     for i, tk in enumerate(tokens_copy):
         if tk["pos"] in {"NOUN", "ADJ", "VERB"}:
-            start_w = max(0, i - 20) # Ventana humana, no enciclopédica
+            start_w = max(0, i - 20)
             end_w = min(length, i + 21)
             
             for j in range(start_w, end_w):
@@ -125,24 +157,20 @@ def construir_html(tokens_data, original_text, options):
                     suffix = common_suffix(tk["text"], other["text"], 3)
                     if suffix: tk["suffix_to_highlight"] = suffix
 
-    # 2. Motor de Estilo (Adverbios, Adjetivos, Perífrasis)
+    # 2. Motor de Estilo
     i = 0
     while i < length:
         tk = tokens_copy[i]
         
-        # Adverbios en -mente
         if options["adverbios"] and tk["pos"] == "ADV" and tk["text"].lower().endswith("mente"):
             tk["styles"].add("color: green; text-decoration: underline;")
             
-        # Adjetivos (Puros)
         if options["adjetivos"] and tk["pos"] == "ADJ":
             tk["styles"].add("background-color: pink; text-decoration: underline; color: black;")
             
-        # NUEVO: Dobles Verbos (Perífrasis Verbales)
         if options["dobles_verbos"] and tk["lemma"] in AUXILIARES_PERIFRASIS:
-            # Detectar: auxiliar + (a/que/de) + infinitivo/gerundio
             found_periphrasis = False
-            for lookahead in range(1, 4): # Buscamos en los próximos 3 tokens
+            for lookahead in range(1, 4):
                 if i + lookahead < length:
                     target = tokens_copy[i + lookahead]
                     if "VerbForm=Inf" in target["morph"] or "VerbForm=Ger" in target["morph"]:
@@ -155,7 +183,6 @@ def construir_html(tokens_data, original_text, options):
                 i += 1
                 continue
 
-        # NUEVO: Pretérito Compuesto
         if options["preterito"] and tk["lemma"] == "haber" and i + 1 < length:
             target = tokens_copy[i + 1]
             if "VerbForm=Part" in target["morph"]:
@@ -165,7 +192,7 @@ def construir_html(tokens_data, original_text, options):
                 continue
         i += 1
 
-    # Renderizado HTML (Preservando estructura original)
+    # Renderizado HTML
     html_result = ""
     paragraphs = original_text.split("\n\n")
     global_idx = 0
@@ -175,7 +202,6 @@ def construir_html(tokens_data, original_text, options):
         lines = p.split("\n")
         for line in lines:
             line_html = ""
-            # Sincronizar tokens con la línea actual
             line_end_offset = original_text.find(line, original_text.find(p)) + len(line)
             
             while global_idx < length and tokens_copy[global_idx]["start"] < line_end_offset:
@@ -186,7 +212,7 @@ def construir_html(tokens_data, original_text, options):
                     suffix = tk["suffix_to_highlight"]
                     pos = word_html.lower().rfind(suffix)
                     if pos >= 0:
-                        word_html = f"{word_html[:pos]}<span style='background-color: #ffcc80; text-decoration: underline;'>{word_html[pos:pos+len(suffix)]}</span>{word_html[pos+len(suffix):]}"
+                        word_html = f"{word_html[:pos]}<span style='background-color: #ffcc80; text-decoration: underline; color: black;'>{word_html[pos:pos+len(suffix)]}</span>{word_html[pos+len(suffix):]}"
                 
                 if tk["styles"]:
                     style_str = " ".join(tk["styles"])
@@ -197,7 +223,26 @@ def construir_html(tokens_data, original_text, options):
             p_html += line_html + "<br>"
         html_result += f"<p>{p_html}</p>"
 
-    return html_result, tokens_copy
+    marca_counts = contar_marcas(tokens_copy)
+    return html_result, marca_counts
+
+def generar_leyenda(marca_counts, options):
+    legend_items = []
+    if options["adverbios"]: legend_items.append(f"<li><span style='color: green; text-decoration: underline; background-color: #f0f0f0; padding: 2px;'>Adverbios en -mente ({marca_counts.get('adverbios', 0)})</span></li>")
+    if options["adjetivos"]: legend_items.append(f"<li><span style='background-color: pink; text-decoration: underline; color: black; padding: 2px;'>Adjetivos ({marca_counts.get('adjetivos', 0)})</span></li>")
+    if options["repeticiones"]: legend_items.append(f"<li><span style='background-color: orange; text-decoration: underline; color: black; padding: 2px;'>Repeticiones Totales ({marca_counts.get('repeticiones_totales', 0)})</span></li>")
+    if options["rimas"]: legend_items.append(f"<li><span style='background-color: #ffcc80; text-decoration: underline; color: black; padding: 2px;'>Rimas Parciales ({marca_counts.get('rimas_parciales', 0)})</span></li>")
+    if options["dobles_verbos"]: legend_items.append(f"<li><span style='background-color: #dab4ff; text-decoration: underline; color: black; padding: 2px;'>Dobles Verbos ({marca_counts.get('dobles_verbos', 0)})</span></li>")
+    if options["preterito"]: legend_items.append(f"<li><span style='background-color: lightblue; text-decoration: underline; color: black; padding: 2px;'>Pretérito Perfecto Comp. ({marca_counts.get('pretérito_compuesto', 0)})</span></li>")
+    
+    return f"""
+    <div style="margin-top: 20px; margin-bottom: 20px; padding: 10px; background-color: #e0e0e0; border-radius: 5px; border: 1px solid #ccc;">
+        <strong style="color: black;">Leyenda de Análisis:</strong>
+        <ul style="list-style-type: none; padding: 0; margin: 0;">
+            {''.join(legend_items)}
+        </ul>
+    </div>
+    """
 
 # --------------------------------------------------------------------
 # Interfaz de Usuario (Streamlit)
@@ -214,26 +259,54 @@ opts = {
     "preterito": st.sidebar.checkbox("Pretérito Compuesto", False)
 }
 
+if st.session_state.get("analysis_done", False):
+    leyenda_html = generar_leyenda(st.session_state.get("marca_counts", {}), opts)
+    st.sidebar.markdown(leyenda_html, unsafe_allow_html=True)
+
 if not st.session_state["analysis_done"]:
     st.markdown("### Pega aquí tu obra maestra")
     texto = st.text_area("", height=400, label_visibility="hidden")
     if st.button("Analizar"):
         with st.spinner("Analizando ritmo y estilo..."):
             tokens_data, original = analizar_texto(texto)
+            html_res, marca_counts = construir_html(tokens_data, original, opts)
             st.session_state["tokens_data"] = tokens_data
             st.session_state["original_text"] = original
+            st.session_state["resultado_html"] = html_res
+            st.session_state["marca_counts"] = marca_counts
             st.session_state["analysis_done"] = True
+            st.session_state["edit_mode"] = False
             st.rerun()
 
-else:
-    html_res, final_tokens = construir_html(st.session_state["tokens_data"], st.session_state["original_text"], opts)
-    
+elif not st.session_state["edit_mode"]:
     st.markdown("### Análisis Estilístico")
+    # Reconstruir HTML si cambian las opciones en el sidebar
+    html_res, marca_counts = construir_html(st.session_state["tokens_data"], st.session_state["original_text"], opts)
+    st.session_state["resultado_html"] = html_res
+    st.session_state["marca_counts"] = marca_counts
+    
     st.markdown(html_res, unsafe_allow_html=True)
     
-    if st.button("Nuevo Análisis"):
-        st.session_state["analysis_done"] = False
-        st.rerun()
+    colA, colB = st.columns(2)
+    with colA:
+        if st.button("Editar en vivo"):
+            st.session_state["edit_mode"] = True
+            st.rerun()
+        if st.button("Limpiar y hacer Nuevo Análisis"):
+            st.session_state["analysis_done"] = False
+            st.rerun()
+    with colB:
+        leyenda_pdf = generar_leyenda(marca_counts, opts)
+        pdf_html = f"<html><body style='font-family: Arial;'>{leyenda_pdf}{html_res}</body></html>"
+        pdf_path = exportar_a_pdf(pdf_html)
+        with open(pdf_path, "rb") as f:
+            st.download_button("Descargar PDF", data=f, file_name="texto_analizado.pdf", mime="application/pdf")
 
-st.sidebar.markdown("---")
-st.sidebar.info("Esta app no corrige ortografía. Se enfoca en el **ritmo**, los **vicios de estilo** y la **fuerza de la prosa**.")
+else:
+    st.markdown("### Texto analizado (editable)")
+    with st.form("editor_form"):
+        edited_html = st_quill(st.session_state["resultado_html"], key="editor_quill")
+        reanalyze_btn = st.form_submit_button("Re-Analizar texto editado")
+        return_btn = st.form_submit_button("Volver a lectura")
+        
+    if reanalyze_btn:
