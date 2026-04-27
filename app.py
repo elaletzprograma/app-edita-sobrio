@@ -19,7 +19,7 @@ def load_spacy_model():
 nlp = load_spacy_model()
 
 # --------------------------------------------------------------------
-# Inicialización de st.session_state (¡El bloque que faltaba!)
+# Inicialización de st.session_state
 # --------------------------------------------------------------------
 if "analysis_done" not in st.session_state:
     st.session_state["analysis_done"] = False
@@ -310,3 +310,25 @@ else:
         return_btn = st.form_submit_button("Volver a lectura")
         
     if reanalyze_btn:
+        plain_text = clean_text(edited_html)
+        with st.spinner("Re-analizando el texto..."):
+            tokens_data, original = analizar_texto(plain_text)
+            html_res, marca_counts = construir_html(tokens_data, original, opts)
+            st.session_state["tokens_data"] = tokens_data
+            st.session_state["original_text"] = original
+            st.session_state["resultado_html"] = html_res
+            st.session_state["marca_counts"] = marca_counts
+            st.session_state["edit_mode"] = False
+            st.rerun()
+    elif return_btn:
+        st.session_state["edit_mode"] = False
+        st.rerun()
+
+st.sidebar.markdown("---")
+st.sidebar.info("Esta app no corrige ortografía. Se enfoca en el **ritmo**, los **vicios de estilo** y la **fuerza de la prosa**.")
+st.markdown("""
+<p style='font-size: small; color: #666; text-align: center; margin-top: 50px;'>
+    App creada por <a href="http://www.elaletz.com" target="_blank">El Aletz</a>, Escritor. Aprendiz de boxeador. Bellako onírico. Punk imaginal.<br>
+    Prueba la app y dime cómo mejorarla o qué características agregarle: <a href="mailto:escribele@elaletz.com">escribele@elaletz.com</a>
+</p>
+""", unsafe_allow_html=True)
