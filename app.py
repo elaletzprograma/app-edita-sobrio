@@ -17,8 +17,8 @@ nlp = spacy.load("es_core_news_md")
 # --------------------------------------------------------------------
 try:
     tool = language_tool_python.LanguageTool('es', remote_server='https://languagetool.org/api/')
-except language_tool_python.utils.LanguageToolError as e:
-    st.error(f"Error al inicializar LanguageTool: {e}")
+except Exception as e:
+    st.warning("El servidor de ortografía está saturado en este momento. El análisis de repeticiones y adverbios seguirá funcionando.")
     tool = None
 
 # --------------------------------------------------------------------
