@@ -25,11 +25,12 @@ if "analysis_done" not in st.session_state:
 if "edit_mode" not in st.session_state:
     st.session_state["edit_mode"] = False
 
-VERBOS_AMBIGUOS = {"corto", "bajo", "canto", "río", "fallo", "paso", "toso", "ahogo"}
+# Verbos que el modelo suele confundir con adjetivos o sustantivos
+VERBOS_AMBIGUOS = {"corto", "bajo", "canto", "río", "fallo", "paso", "toso", "ahogo", "junto", "sigue", "solo"}
 AUXILIARES_PERIFRASIS = {"ir", "seguir", "venir", "andar", "estar", "poder", "deber", "tener", "empezar", "comenzar", "tratar"}
 
 # --------------------------------------------------------------------
-# Funciones Auxiliares (PDF y Limpieza)
+# Funciones Auxiliares
 # --------------------------------------------------------------------
 def exportar_a_pdf(html_content):
     pdf_path = "texto_analizado.pdf"
@@ -49,22 +50,32 @@ def correct_pos_smart(token):
     pos = token.pos_
     dep = token.dep_
     
-    # REGLA A: Vocativos detectados por sintaxis
+    # REGLA A: Onomatopeyas e interjecciones
+    if text_lower in ["ahah", "aha", "ujum", "nel"]:
+        return "INTJ"
+
+    # REGLA B: Vocativos específicos (Ej: ", puto")
+    # Si la palabra es "puto" y viene tras una coma o signo, es sustantivo
+    if text_lower == "puto" and token.i > 0 and token.nbor(-1).text in [",", "!", "¡"]:
+        return "NOUN"
+    
     if dep == "vocative":
         return "NOUN"
 
-    # REGLA B: Verbos disfrazados (Contexto inmediato)
+    # REGLA C: Verbos ambiguos (Detección por contexto posterior)
     if text_lower in VERBOS_AMBIGUOS:
-        if token.i < len(token.doc)-1 and token.nbor(1).pos_ in ["NOUN", "DET", "PRON", "ADV"]:
-            return "VERB"
+        if token.i < len(token.doc)-1:
+            next_t = token.nbor(1)
+            if next_t.pos_ in ["NOUN", "DET", "PRON", "ADV", "ADP", "PUNCT"]:
+                return "VERB"
 
-    # REGLA C: La regla de la Sustantivación
+    # REGLA D: Sustantivación por determinantes
     if pos == "ADJ":
         if token.i > 0 and token.nbor(-1).pos_ in ["DET", "PRON"]:
             return "NOUN"
 
-    # REGLA D: Adverbios de modo
-    if text_lower == "tranquilo" and (dep == "advmod" or (token.i > 0 and token.nbor(-1).text == ",")):
+    # REGLA E: Adverbios de modo
+    if text_lower in ["tranquilo", "solo"] and (dep == "advmod" or (token.i > 0 and token.nbor(-1).text == ",")):
         return "ADV"
 
     # Filtro de Participios
@@ -134,7 +145,7 @@ def construir_html(tokens_data, original_text, options):
 
     for i, tk in enumerate(tokens_copy):
         if tk["pos"] in {"NOUN", "ADJ", "VERB"}:
-            start_w = max(0, i - 20) # Ventana fija en 20
+            start_w = max(0, i - 20)
             end_w = min(length, i + 21)
             
             for j in range(start_w, end_w):
